@@ -8,6 +8,8 @@
 #include "Event.h"
 #include "ItemCountValue.h"
 #include "Playerbots.h"
+#include "WorldSession.h"
+#include "ItemPackets.h"
 
 std::vector<std::string> split(std::string const s, char delim);
 
@@ -46,7 +48,20 @@ void UnequipAction::UnequipItem(FindItemVisitor* visitor)
     IterateItems(visitor, ITERATE_ALL_ITEMS);
     std::vector<Item*> items = visitor->GetResult();
     if (!items.empty())
-        UnequipItem(*items.begin());
+    {
+        // Prefer equipped item
+        auto equipped = std::find_if(items.begin(), items.end(),
+                                     [](Item* item)
+                                     {
+                                         uint8 bag = item->GetBagSlot();
+                                         return bag == INVENTORY_SLOT_BAG_0 && item->GetSlot() < EQUIPMENT_SLOT_END;
+                                     });
+
+        if (equipped != items.end())
+            UnequipItem(*equipped);
+        else
+            UnequipItem(*items.begin());
+    }
 }
 
 void UnequipAction::UnequipItem(Item* item)
@@ -57,7 +72,9 @@ void UnequipAction::UnequipItem(Item* item)
 
     WorldPacket packet(CMSG_AUTOSTORE_BAG_ITEM, 3);
     packet << bagIndex << slot << dstBag;
-    bot->GetSession()->HandleAutoStoreBagItemOpcode(packet);
+    WorldPackets::Item::AutoStoreBagItem nicePacket(std::move(packet));
+    nicePacket.Read();
+    bot->GetSession()->HandleAutoStoreBagItemOpcode(nicePacket);
 
     std::ostringstream out;
     out << chat->FormatItem(item->GetTemplate()) << " unequipped";

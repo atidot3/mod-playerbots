@@ -9,6 +9,7 @@
 #include "GenericPaladinNonCombatStrategy.h"
 #include "HealPaladinStrategy.h"
 #include "NamedObjectContext.h"
+#include "OffhealRetPaladinStrategy.h"
 #include "PaladinActions.h"
 #include "PaladinBuffStrategies.h"
 #include "PaladinTriggers.h"
@@ -87,12 +88,14 @@ public:
         creators["tank"] = &PaladinCombatStrategyFactoryInternal::tank;
         creators["dps"] = &PaladinCombatStrategyFactoryInternal::dps;
         creators["heal"] = &PaladinCombatStrategyFactoryInternal::heal;
+        creators["offheal"] = &PaladinCombatStrategyFactoryInternal::offheal;
     }
 
 private:
     static Strategy* tank(PlayerbotAI* botAI) { return new TankPaladinStrategy(botAI); }
     static Strategy* dps(PlayerbotAI* botAI) { return new DpsPaladinStrategy(botAI); }
     static Strategy* heal(PlayerbotAI* botAI) { return new HealPaladinStrategy(botAI); }
+    static Strategy* offheal(PlayerbotAI* botAI) { return new OffhealRetPaladinStrategy(botAI); }
 };
 
 class PaladinTriggerFactoryInternal : public NamedObjectContext<Trigger>
@@ -142,6 +145,7 @@ public:
         creators["blessing of kings on party"] = &PaladinTriggerFactoryInternal::blessing_of_kings_on_party;
         creators["blessing of wisdom on party"] = &PaladinTriggerFactoryInternal::blessing_of_wisdom_on_party;
         creators["blessing of might on party"] = &PaladinTriggerFactoryInternal::blessing_of_might_on_party;
+        creators["blessing of sanctuary on party"] = &PaladinTriggerFactoryInternal::blessing_of_sanctuary_on_party;
 
         creators["avenging wrath"] = &PaladinTriggerFactoryInternal::avenging_wrath;
     }
@@ -208,6 +212,10 @@ private:
         return new BlessingOfWisdomOnPartyTrigger(botAI);
     }
     static Trigger* blessing_of_might_on_party(PlayerbotAI* botAI) { return new BlessingOfMightOnPartyTrigger(botAI); }
+    static Trigger* blessing_of_sanctuary_on_party(PlayerbotAI* botAI)
+    {
+        return new BlessingOfSanctuaryOnPartyTrigger(botAI);
+    }
 
     static Trigger* avenging_wrath(PlayerbotAI* botAI) { return new AvengingWrathTrigger(botAI); }
 };
@@ -228,6 +236,7 @@ public:
         creators["blessing of kings on party"] = &PaladinAiObjectContextInternal::blessing_of_kings_on_party;
         creators["blessing of might on party"] = &PaladinAiObjectContextInternal::blessing_of_might_on_party;
         creators["blessing of wisdom on party"] = &PaladinAiObjectContextInternal::blessing_of_wisdom_on_party;
+        creators["blessing of sanctuary on party"] = &PaladinAiObjectContextInternal::blessing_of_sanctuary_on_party;
         creators["redemption"] = &PaladinAiObjectContextInternal::redemption;
         creators["crusader strike"] = &PaladinAiObjectContextInternal::crusader_strike;
         creators["crusader aura"] = &PaladinAiObjectContextInternal::crusader_aura;
@@ -326,6 +335,10 @@ private:
     {
         return new CastBlessingOfWisdomOnPartyAction(botAI);
     }
+    static Action* blessing_of_sanctuary_on_party(PlayerbotAI* botAI)
+    {
+        return new CastBlessingOfSanctuaryOnPartyAction(botAI);
+    }
     static Action* redemption(PlayerbotAI* botAI) { return new CastRedemptionAction(botAI); }
     static Action* crusader_strike(PlayerbotAI* botAI) { return new CastCrusaderStrikeAction(botAI); }
     static Action* crusader_aura(PlayerbotAI* botAI) { return new CastCrusaderAuraAction(botAI); }
@@ -399,12 +412,46 @@ private:
     static Action* cancel_divine_sacrifice(PlayerbotAI* ai) { return new CastCancelDivineSacrificeAction(ai); }
 };
 
-PaladinAiObjectContext::PaladinAiObjectContext(PlayerbotAI* botAI) : AiObjectContext(botAI)
+SharedNamedObjectContextList<Strategy> PaladinAiObjectContext::sharedStrategyContexts;
+SharedNamedObjectContextList<Action> PaladinAiObjectContext::sharedActionContexts;
+SharedNamedObjectContextList<Trigger> PaladinAiObjectContext::sharedTriggerContexts;
+SharedNamedObjectContextList<UntypedValue> PaladinAiObjectContext::sharedValueContexts;
+
+PaladinAiObjectContext::PaladinAiObjectContext(PlayerbotAI* botAI)
+    : AiObjectContext(botAI, sharedStrategyContexts, sharedActionContexts, sharedTriggerContexts, sharedValueContexts)
 {
+}
+
+void PaladinAiObjectContext::BuildSharedContexts()
+{
+    BuildSharedStrategyContexts(sharedStrategyContexts);
+    BuildSharedActionContexts(sharedActionContexts);
+    BuildSharedTriggerContexts(sharedTriggerContexts);
+    BuildSharedValueContexts(sharedValueContexts);
+}
+
+void PaladinAiObjectContext::BuildSharedStrategyContexts(SharedNamedObjectContextList<Strategy>& strategyContexts)
+{
+    AiObjectContext::BuildSharedStrategyContexts(strategyContexts);
     strategyContexts.Add(new PaladinStrategyFactoryInternal());
     strategyContexts.Add(new PaladinCombatStrategyFactoryInternal());
     strategyContexts.Add(new PaladinBuffStrategyFactoryInternal());
     strategyContexts.Add(new PaladinResistanceStrategyFactoryInternal());
+}
+
+void PaladinAiObjectContext::BuildSharedActionContexts(SharedNamedObjectContextList<Action>& actionContexts)
+{
+    AiObjectContext::BuildSharedActionContexts(actionContexts);
     actionContexts.Add(new PaladinAiObjectContextInternal());
+}
+
+void PaladinAiObjectContext::BuildSharedTriggerContexts(SharedNamedObjectContextList<Trigger>& triggerContexts)
+{
+    AiObjectContext::BuildSharedTriggerContexts(triggerContexts);
     triggerContexts.Add(new PaladinTriggerFactoryInternal());
+}
+
+void PaladinAiObjectContext::BuildSharedValueContexts(SharedNamedObjectContextList<UntypedValue>& valueContexts)
+{
+    AiObjectContext::BuildSharedValueContexts(valueContexts);
 }

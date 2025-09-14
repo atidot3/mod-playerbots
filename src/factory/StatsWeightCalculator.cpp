@@ -9,6 +9,7 @@
 
 #include "AiFactory.h"
 #include "DBCStores.h"
+#include "ItemEnchantmentMgr.h"
 #include "ItemTemplate.h"
 #include "ObjectMgr.h"
 #include "PlayerbotAI.h"
@@ -32,6 +33,7 @@ StatsWeightCalculator::StatsWeightCalculator(Player* player) : player_(player)
     else
         type_ = CollectorType::RANGED;
     cls = player->getClass();
+    lvl = player->GetLevel();
     tab = AiFactory::GetPlayerSpecTab(player);
     collector_ = std::make_unique<StatsCollector>(type_, cls);
 
@@ -59,7 +61,7 @@ void StatsWeightCalculator::Reset()
     }
 }
 
-float StatsWeightCalculator::CalculateItem(uint32 itemId)
+float StatsWeightCalculator::CalculateItem(uint32 itemId, int32 randomPropertyIds)
 {
     ItemTemplate const* proto = &sObjectMgr->GetItemTemplateStore()->at(itemId);
 
@@ -69,6 +71,9 @@ float StatsWeightCalculator::CalculateItem(uint32 itemId)
     Reset();
 
     collector_->CollectItemStats(proto);
+
+    if (randomPropertyIds != 0)
+        CalculateRandomProperty(randomPropertyIds, itemId);
 
     if (enable_overflow_penalty_)
         ApplyOverflowPenalty(player_);
@@ -116,6 +121,53 @@ float StatsWeightCalculator::CalculateEnchant(uint32 enchantId)
     return weight_;
 }
 
+void StatsWeightCalculator::CalculateRandomProperty(int32 randomPropertyId, uint32 itemId)
+{
+    if (randomPropertyId > 0)
+    {
+        ItemRandomPropertiesEntry const* item_rand = sItemRandomPropertiesStore.LookupEntry(randomPropertyId);
+        if (!item_rand)
+        {
+            return;
+        }
+
+        for (uint32 i = PROP_ENCHANTMENT_SLOT_0; i < MAX_ENCHANTMENT_SLOT; ++i)
+        {
+            uint32 enchantId = item_rand->Enchantment[i - PROP_ENCHANTMENT_SLOT_0];
+            SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchantId);
+            if (enchant)
+                collector_->CollectEnchantStats(enchant);
+        }
+    }
+    else
+    {
+        ItemRandomSuffixEntry const* item_rand = sItemRandomSuffixStore.LookupEntry(-randomPropertyId);
+        if (!item_rand)
+        {
+            return;
+        }
+
+        for (uint32 i = PROP_ENCHANTMENT_SLOT_0; i < MAX_ENCHANTMENT_SLOT; ++i)
+        {
+            uint32 enchantId = item_rand->Enchantment[i - PROP_ENCHANTMENT_SLOT_0];
+            SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchantId);
+            uint32 enchant_amount = 0;
+
+            for (int k = 0; k < MAX_ITEM_ENCHANTMENT_EFFECTS; ++k)
+            {
+                if (item_rand->Enchantment[k] == enchantId)
+                {
+                    enchant_amount = uint32((item_rand->AllocationPct[k] * GenerateEnchSuffixFactor(itemId)) / 10000);
+                    break;
+                }
+            }
+
+            if (enchant)
+                collector_->CollectEnchantStats(enchant, enchant_amount);
+        }
+    }
+}
+
 void StatsWeightCalculator::GenerateWeights(Player* player)
 {
     GenerateBasicWeights(player);
@@ -126,9 +178,11 @@ void StatsWeightCalculator::GenerateWeights(Player* player)
 void StatsWeightCalculator::GenerateBasicWeights(Player* player)
 {
     // Basic weights
-    stats_weights_[STATS_TYPE_STAMINA] += 0.01f;
+    stats_weights_[STATS_TYPE_STAMINA] += 0.1f;
     stats_weights_[STATS_TYPE_ARMOR] += 0.001f;
     stats_weights_[STATS_TYPE_BONUS] += 1.0f;
+    stats_weights_[STATS_TYPE_MELEE_DPS] += 0.01f;
+    stats_weights_[STATS_TYPE_RANGED_DPS] += 0.01f;
 
     if (cls == CLASS_HUNTER && (tab == HUNTER_TAB_BEASTMASTER || tab == HUNTER_TAB_SURVIVAL))
     {
@@ -292,17 +346,25 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_CRIT] += 0.8f;
         stats_weights_[STATS_TYPE_HASTE] += 1.0f;
     }
-    else if ((cls == CLASS_PALADIN && tab == PALADIN_TAB_HOLY) ||       // holy
-             (cls == CLASS_PRIEST && tab != PRIEST_TAB_SHADOW) ||       // discipline / holy
-             (cls == CLASS_SHAMAN && tab == SHAMAN_TAB_RESTORATION) ||  // heal
+    else if ((cls == CLASS_PALADIN && tab == PALADIN_TAB_HOLY) ||     // holy
+             (cls == CLASS_SHAMAN && tab == SHAMAN_TAB_RESTORATION))  // heal
+    {
+        stats_weights_[STATS_TYPE_INTELLECT] += 0.9f;
+        stats_weights_[STATS_TYPE_SPIRIT] += 0.15f;
+        stats_weights_[STATS_TYPE_HEAL_POWER] += 1.0f;
+        stats_weights_[STATS_TYPE_MANA_REGENERATION] += 0.9f;
+        stats_weights_[STATS_TYPE_CRIT] += 0.6f;
+        stats_weights_[STATS_TYPE_HASTE] += 0.8f;
+    }
+    else if ((cls == CLASS_PRIEST && tab != PRIEST_TAB_SHADOW) ||  // discipline / holy
              (cls == CLASS_DRUID && tab == DRUID_TAB_RESTORATION))
     {
         stats_weights_[STATS_TYPE_INTELLECT] += 0.8f;
-        stats_weights_[STATS_TYPE_SPIRIT] += 0.8f;
+        stats_weights_[STATS_TYPE_SPIRIT] += 0.6f;
         stats_weights_[STATS_TYPE_HEAL_POWER] += 1.0f;
-        stats_weights_[STATS_TYPE_MANA_REGENERATION] += 1.2f;
-        stats_weights_[STATS_TYPE_CRIT] += 0.7f;
-        stats_weights_[STATS_TYPE_HASTE] += 1.0f;
+        stats_weights_[STATS_TYPE_MANA_REGENERATION] += 0.9f;
+        stats_weights_[STATS_TYPE_CRIT] += 0.6f;
+        stats_weights_[STATS_TYPE_HASTE] += 0.8f;
         stats_weights_[STATS_TYPE_RANGED_DPS] += 1.0f;
     }
     else if ((cls == CLASS_WARRIOR && tab == WARRIOR_TAB_PROTECTION) ||
@@ -455,9 +517,9 @@ void StatsWeightCalculator::CalculateItemTypePenalty(ItemTemplate const* proto)
     // {
     //     weight_ *= 1.0;
     // }
-    // double hand
     if (proto->Class == ITEM_CLASS_WEAPON)
     {
+        // double hand
         bool isDoubleHand = proto->Class == ITEM_CLASS_WEAPON &&
                             !(ITEM_SUBCLASS_MASK_SINGLE_HAND & (1 << proto->SubClass)) &&
                             !(ITEM_SUBCLASS_MASK_WEAPON_RANGED & (1 << proto->SubClass));
@@ -465,29 +527,37 @@ void StatsWeightCalculator::CalculateItemTypePenalty(ItemTemplate const* proto)
         if (isDoubleHand)
         {
             weight_ *= 0.5;
-        }
-        // spec without double hand
-        // enhancement, rogue, ice dk, unholy dk, shield tank, fury warrior without titan's grip but with duel wield
-        if (isDoubleHand &&
-            ((cls == CLASS_SHAMAN && tab == SHAMAN_TAB_ENHANCEMENT && player_->CanDualWield()) ||
-             (cls == CLASS_ROGUE) || (cls == CLASS_DEATH_KNIGHT && tab == DEATHKNIGHT_TAB_FROST) ||
-             (cls == CLASS_WARRIOR && tab == WARRIOR_TAB_FURY && !player_->CanTitanGrip() && player_->CanDualWield()) ||
-             (cls == CLASS_WARRIOR && tab == WARRIOR_TAB_PROTECTION) ||
-             (cls == CLASS_PALADIN && tab == PALADIN_TAB_PROTECTION)))
-        {
-            weight_ *= 0.1;
+            // spec without double hand
+            // enhancement, rogue, ice dk, unholy dk, shield tank, fury warrior without titan's grip but with duel wield
+            if (((cls == CLASS_SHAMAN && tab == SHAMAN_TAB_ENHANCEMENT && player_->CanDualWield()) ||
+                 (cls == CLASS_ROGUE) || (cls == CLASS_DEATH_KNIGHT && tab == DEATHKNIGHT_TAB_FROST) ||
+                 (cls == CLASS_WARRIOR && tab == WARRIOR_TAB_FURY && !player_->CanTitanGrip() &&
+                  player_->CanDualWield()) ||
+                 (cls == CLASS_WARRIOR && tab == WARRIOR_TAB_PROTECTION) ||
+                 (cls == CLASS_PALADIN && tab == PALADIN_TAB_PROTECTION)))
+            {
+                weight_ *= 0.1;
+            }
         }
         // spec with double hand
         // fury without duel wield, arms, bear, retribution, blood dk
-        if (!isDoubleHand &&
-            ((cls == CLASS_HUNTER && !player_->CanDualWield()) ||
-             (cls == CLASS_WARRIOR && tab == WARRIOR_TAB_FURY && !player_->CanDualWield()) ||
-             (cls == CLASS_WARRIOR && tab == WARRIOR_TAB_ARMS) || (cls == CLASS_DRUID && tab == DRUID_TAB_FERAL) ||
-             (cls == CLASS_PALADIN && tab == PALADIN_TAB_RETRIBUTION) ||
-             (cls == CLASS_DEATH_KNIGHT && tab == DEATHKNIGHT_TAB_BLOOD) ||
-             (cls == CLASS_SHAMAN && tab == SHAMAN_TAB_ENHANCEMENT && !player_->CanDualWield())))
+        if (!isDoubleHand)
         {
-            weight_ *= 0.1;
+            if ((cls == CLASS_HUNTER && !player_->CanDualWield()) ||
+                (cls == CLASS_WARRIOR && tab == WARRIOR_TAB_FURY && !player_->CanDualWield()) ||
+                (cls == CLASS_WARRIOR && tab == WARRIOR_TAB_ARMS) || (cls == CLASS_DRUID && tab == DRUID_TAB_FERAL) ||
+                (cls == CLASS_PALADIN && tab == PALADIN_TAB_RETRIBUTION) ||
+                (cls == CLASS_DEATH_KNIGHT && tab == DEATHKNIGHT_TAB_BLOOD) ||
+                (cls == CLASS_SHAMAN && tab == SHAMAN_TAB_ENHANCEMENT && !player_->CanDualWield()))
+            {
+                weight_ *= 0.1;
+            }
+            // caster's main hand (cannot duel weapon but can equip two-hands stuff)
+            if (cls == CLASS_MAGE || cls == CLASS_PRIEST || cls == CLASS_WARLOCK || cls == CLASS_DRUID ||
+                (cls == CLASS_SHAMAN && !player_->CanDualWield()))
+            {
+                weight_ *= 0.65;
+            }
         }
         // fury with titan's grip
         if ((!isDoubleHand || proto->SubClass == ITEM_SUBCLASS_WEAPON_POLEARM ||
@@ -496,14 +566,18 @@ void StatsWeightCalculator::CalculateItemTypePenalty(ItemTemplate const* proto)
         {
             weight_ *= 0.1;
         }
+
         if (cls == CLASS_HUNTER && proto->SubClass == ITEM_SUBCLASS_WEAPON_THROWN)
         {
             weight_ *= 0.1;
         }
-        if (cls == CLASS_ROGUE && tab == ROGUE_TAB_ASSASSINATION && proto->SubClass != ITEM_SUBCLASS_WEAPON_DAGGER)
+        
+        if (lvl >= 10 && cls == CLASS_ROGUE && (tab == ROGUE_TAB_ASSASSINATION || tab == ROGUE_TAB_SUBTLETY) &&
+            proto->SubClass == ITEM_SUBCLASS_WEAPON_DAGGER)
         {
-            weight_ *= 0.1;
+            weight_ *= 1.5;
         }
+
         if (cls == CLASS_ROGUE && player_->HasAura(13964) &&
             (proto->SubClass == ITEM_SUBCLASS_WEAPON_SWORD || proto->SubClass == ITEM_SUBCLASS_WEAPON_AXE))
         {
@@ -549,8 +623,15 @@ void StatsWeightCalculator::ApplyOverflowPenalty(Player* player)
         if (hitOverflowType_ & CollectorType::SPELL)
         {
             hit_current = player->GetTotalAuraModifier(SPELL_AURA_MOD_SPELL_HIT_CHANCE);
-            hit_current += player->GetTotalAuraModifier(SPELL_AURA_MOD_INCREASES_SPELL_PCT_TO_HIT); // suppression (18176)
+            hit_current +=
+                player->GetTotalAuraModifier(SPELL_AURA_MOD_INCREASES_SPELL_PCT_TO_HIT);  // suppression (18176)
             hit_current += player->GetRatingBonusValue(CR_HIT_SPELL);
+
+            if (cls == CLASS_PRIEST && tab == PRIEST_TAB_SHADOW && player->HasAura(15835))  // Shadow Focus
+                hit_current += 3;
+            if (cls == CLASS_MAGE && tab == MAGE_TAB_ARCANE && player->HasAura(12840))  // Arcane Focus
+                hit_current += 3;
+
             hit_overflow = SPELL_HIT_OVERFLOW;
             if (hit_overflow > hit_current)
                 validPoints = (hit_overflow - hit_current) / player->GetRatingMultiplier(CR_HIT_SPELL);
@@ -577,7 +658,7 @@ void StatsWeightCalculator::ApplyOverflowPenalty(Player* player)
             else
                 validPoints = 0;
         }
-        collector_->stats[STATS_TYPE_HIT] = std::min(collector_->stats[STATS_TYPE_HIT], (int)validPoints);
+        collector_->stats[STATS_TYPE_HIT] = std::min(collector_->stats[STATS_TYPE_HIT], validPoints);
     }
 
     {
@@ -594,8 +675,7 @@ void StatsWeightCalculator::ApplyOverflowPenalty(Player* player)
             else
                 validPoints = 0;
 
-            collector_->stats[STATS_TYPE_EXPERTISE] =
-                std::min(collector_->stats[STATS_TYPE_EXPERTISE], (int)validPoints);
+            collector_->stats[STATS_TYPE_EXPERTISE] = std::min(collector_->stats[STATS_TYPE_EXPERTISE], validPoints);
         }
     }
 
@@ -612,7 +692,7 @@ void StatsWeightCalculator::ApplyOverflowPenalty(Player* player)
             else
                 validPoints = 0;
 
-            collector_->stats[STATS_TYPE_DEFENSE] = std::min(collector_->stats[STATS_TYPE_DEFENSE], (int)validPoints);
+            collector_->stats[STATS_TYPE_DEFENSE] = std::min(collector_->stats[STATS_TYPE_DEFENSE], validPoints);
         }
     }
 
@@ -631,7 +711,7 @@ void StatsWeightCalculator::ApplyOverflowPenalty(Player* player)
                 validPoints = 0;
 
             collector_->stats[STATS_TYPE_ARMOR_PENETRATION] =
-                std::min(collector_->stats[STATS_TYPE_ARMOR_PENETRATION], (int)validPoints);
+                std::min(collector_->stats[STATS_TYPE_ARMOR_PENETRATION], validPoints);
         }
     }
 }
@@ -641,7 +721,7 @@ void StatsWeightCalculator::ApplyWeightFinetune(Player* player)
     {
         if (type_ & (CollectorType::MELEE | CollectorType::RANGED))
         {
-            float armor_penetration_current, armor_penetration_overflow;
+            float armor_penetration_current /*, armor_penetration_overflow*/;  // not used, line marked for removal.
             armor_penetration_current = player->GetRatingBonusValue(CR_ARMOR_PENETRATION);
             if (armor_penetration_current > 50)
                 stats_weights_[STATS_TYPE_ARMOR_PENETRATION] *= 1.2f;

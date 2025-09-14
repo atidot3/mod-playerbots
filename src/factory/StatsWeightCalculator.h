@@ -28,18 +28,19 @@ class StatsWeightCalculator
 public:
     StatsWeightCalculator(Player* player);
     void Reset();
-    float CalculateItem(uint32 itemId);
+    float CalculateItem(uint32 itemId, int32 randomPropertyId = 0);
     float CalculateEnchant(uint32 enchantId);
-
+    
     void SetOverflowPenalty(bool apply) { enable_overflow_penalty_ = apply; }
     void SetItemSetBonus(bool apply) { enable_item_set_bonus_ = apply; }
     void SetQualityBlend(bool apply) { enable_quality_blend_ = apply; }
-
-private:
+    
+    private:
     void GenerateWeights(Player* player);
     void GenerateBasicWeights(Player* player);
     void GenerateAdditionalWeights(Player* player);
-
+    
+    void CalculateRandomProperty(int32 randomPropertyId, uint32 itemId);
     void CalculateItemSetMod(Player* player, ItemTemplate const* proto);
     void CalculateSocketBonus(Player* player, ItemTemplate const* proto);
 
@@ -56,6 +57,7 @@ private:
     CollectorType hitOverflowType_;
     std::unique_ptr<StatsCollector> collector_;
     uint8 cls;
+    uint8 lvl;
     int tab;
     bool enable_overflow_penalty_;
     bool enable_item_set_bonus_;

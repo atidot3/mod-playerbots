@@ -143,13 +143,16 @@ void CasterDruidStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("eclipse (lunar)",
                                        NextAction::array(0, new NextAction("starfire", ACTION_NORMAL + 6), nullptr)));
     triggers.push_back(
-        new TriggerNode("medium mana", NextAction::array(0, new NextAction("innervate", ACTION_HIGH + 9), NULL)));
+        new TriggerNode("medium mana", NextAction::array(0, new NextAction("innervate", ACTION_HIGH + 9), nullptr)));
+
     triggers.push_back(new TriggerNode("enemy too close for spell",
                                        NextAction::array(0, new NextAction("flee", ACTION_MOVE + 9), nullptr)));
 }
 
 void CasterDruidAoeStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
+    triggers.push_back(
+        new TriggerNode("hurricane channel check", NextAction::array(0, new NextAction("cancel channel", ACTION_HIGH + 2), nullptr)));
     triggers.push_back(
         new TriggerNode("medium aoe", NextAction::array(0, new NextAction("hurricane", ACTION_HIGH + 1), nullptr)));
     triggers.push_back(new TriggerNode(

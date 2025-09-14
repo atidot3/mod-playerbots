@@ -92,7 +92,7 @@ bool CastSpellAction::isPossible()
         return false;
     }
 
-    Spell* currentSpell = bot->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    // Spell* currentSpell = bot->GetCurrentSpell(CURRENT_GENERIC_SPELL); //not used, line marked for removal.
     return botAI->CanCastSpell(spell, GetTarget());
 }
 
@@ -304,7 +304,6 @@ bool UseTrinketAction::Execute(Event event)
         return true;
 
     Item* trinket2 = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_TRINKET2);
-    
     if (trinket2 && UseTrinket(trinket2))
         return true;
     
@@ -321,7 +320,7 @@ bool UseTrinketAction::UseTrinket(Item* item)
 
     uint8 bagIndex = item->GetBagSlot();
     uint8 slot = item->GetSlot();
-    uint8 spell_index = 0;
+    // uint8 spell_index = 0; //not used, line marked for removal.
     uint8 cast_count = 1;
     ObjectGuid item_guid = item->GetGUID();
     uint32 glyphIndex = 0;
@@ -333,6 +332,33 @@ bool UseTrinketAction::UseTrinket(Item* item)
         if (item->GetTemplate()->Spells[i].SpellId > 0 && item->GetTemplate()->Spells[i].SpellTrigger == ITEM_SPELLTRIGGER_ON_USE)
         {
             spellId = item->GetTemplate()->Spells[i].SpellId;
+            const SpellInfo* spellInfo = sSpellMgr->GetSpellInfo(spellId);
+
+            if (!spellInfo || !spellInfo->IsPositive())
+                return false;
+            
+            bool applyAura = false;
+            for (int i = 0; i < MAX_SPELL_EFFECTS; i++)
+            {
+                const SpellEffectInfo& effectInfo = spellInfo->Effects[i];
+                if (effectInfo.Effect == SPELL_EFFECT_APPLY_AURA) {
+                    applyAura = true;
+                    break;
+                }
+            }
+            
+            if (!applyAura)
+                return false;
+            
+            uint32 spellProcFlag = spellInfo->ProcFlags;
+            
+            // Handle items with procflag "if you kill a target that grants honor or experience"
+            // Bots will "learn" the trinket proc, so CanCastSpell() will be true
+            // e.g. on Item https://www.wowhead.com/wotlk/item=44074/oracle-talisman-of-ablution leading to
+            // constant casting of the proc spell onto themselfes https://www.wowhead.com/wotlk/spell=59787/oracle-ablutions
+            // This will lead to multiple hundreds of entries in m_appliedAuras -> Once killing an enemy -> Big diff time spikes
+            if (spellProcFlag != 0) return false;
+
             if (!botAI->CanCastSpell(spellId, bot, false))
             {
                 return false;
@@ -345,17 +371,8 @@ bool UseTrinketAction::UseTrinket(Item* item)
     WorldPacket packet(CMSG_USE_ITEM);
     packet << bagIndex << slot << cast_count << spellId << item_guid << glyphIndex << castFlags;
 
-    Unit* target = AI_VALUE(Unit*, "current target");
-    if (target)
-    {
-        targetFlag = TARGET_FLAG_UNIT;
-        packet << targetFlag << target->GetGUID().WriteAsPacked();
-    }
-    else 
-    {
-        targetFlag = TARGET_FLAG_NONE;
-        packet << targetFlag << bot->GetPackGUID();
-    }
+    targetFlag = TARGET_FLAG_NONE;
+    packet << targetFlag << bot->GetPackGUID();
     bot->GetSession()->HandleUseItemOpcode(packet);
     return true;
 }

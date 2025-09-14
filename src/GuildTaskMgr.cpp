@@ -168,7 +168,7 @@ public:
 
     bool Apply(ItemTemplate const* proto) override
     {
-        uint32* tradeSkills = PlayerbotFactory::tradeSkills;
+        //uint32* tradeSkills = PlayerbotFactory::tradeSkills;
 
         for (uint32 i = 0; i < 13; ++i)
         {
@@ -525,6 +525,11 @@ uint32 GuildTaskMgr::GetMaxItemTaskCount(uint32 itemId)
 
 bool GuildTaskMgr::IsGuildTaskItem(uint32 itemId, uint32 guildId)
 {
+    if (!sPlayerbotAIConfig->guildTaskEnabled)
+    {
+        return 0;
+    }
+
     uint32 value = 0;
 
     PlayerbotsDatabasePreparedStatement* stmt =
@@ -546,8 +551,13 @@ bool GuildTaskMgr::IsGuildTaskItem(uint32 itemId, uint32 guildId)
 }
 
 std::map<uint32, uint32> GuildTaskMgr::GetTaskValues(uint32 owner, std::string const type,
-                                                     uint32* validIn /* = nullptr */)
+                                                     [[maybe_unused]] uint32* validIn /* = nullptr */)
 {
+    if (!sPlayerbotAIConfig->guildTaskEnabled)
+    {
+        return std::map<uint32, uint32>();
+    }
+
     std::map<uint32, uint32> results;
 
     PlayerbotsDatabasePreparedStatement* stmt =
@@ -571,11 +581,16 @@ std::map<uint32, uint32> GuildTaskMgr::GetTaskValues(uint32 owner, std::string c
         } while (result->NextRow());
     }
 
-    return std::move(results);
+    return results;
 }
 
-uint32 GuildTaskMgr::GetTaskValue(uint32 owner, uint32 guildId, std::string const type, uint32* validIn /* = nullptr */)
+uint32 GuildTaskMgr::GetTaskValue(uint32 owner, uint32 guildId, std::string const type, [[maybe_unused]] uint32* validIn /* = nullptr */)
 {
+    if (!sPlayerbotAIConfig->guildTaskEnabled)
+    {
+        return 0;
+    }
+    
     uint32 value = 0;
 
     PlayerbotsDatabasePreparedStatement* stmt =
@@ -622,7 +637,7 @@ uint32 GuildTaskMgr::SetTaskValue(uint32 owner, uint32 guildId, std::string cons
     return value;
 }
 
-bool GuildTaskMgr::HandleConsoleCommand(ChatHandler* handler, char const* args)
+bool GuildTaskMgr::HandleConsoleCommand(ChatHandler* /* handler */, char const* args)
 {
     if (!sPlayerbotAIConfig->guildTaskEnabled)
     {

@@ -121,6 +121,9 @@ void GenericDruidStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // NextAction::array(0, new NextAction("innervate", ACTION_EMERGENCY + 5), nullptr)));
     triggers.push_back(new TriggerNode("combat party member dead",
                                        NextAction::array(0, new NextAction("rebirth", ACTION_HIGH + 9), NULL)));
+    triggers.push_back(new TriggerNode("being attacked",
+                                       NextAction::array(0, new NextAction("nature's grasp", ACTION_HIGH + 1), nullptr)));
+    triggers.push_back(new TriggerNode("new pet", NextAction::array(0, new NextAction("set pet stance", 60.0f), nullptr)));
 }
 
 void DruidCureStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)

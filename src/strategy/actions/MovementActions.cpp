@@ -847,6 +847,26 @@ bool MovementAction::ReachCombatTo(Unit* target, float distance)
     float tx = target->GetPositionX();
     float ty = target->GetPositionY();
     float tz = target->GetPositionZ();
+
+    float targetOrientation = target->GetOrientation();
+
+    float deltaAngle = Position::NormalizeOrientation(targetOrientation - target->GetAngle(bot));
+    if (deltaAngle > M_PI)
+        deltaAngle -= 2.0f * M_PI; // -PI..PI
+    // if target is moving forward and moving far away, predict the position
+    bool behind = fabs(deltaAngle) > M_PI_2;
+    if (target->HasUnitMovementFlag(MOVEMENTFLAG_FORWARD) && behind) {
+        float predictDis = std::min(3.0f, target->GetObjectSize() * 2);
+        tx += cos(target->GetOrientation()) * predictDis;
+        ty += sin(target->GetOrientation()) * predictDis;
+        if (!target->GetMap()->CheckCollisionAndGetValidCoords(target, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(),
+        tx, ty, tz))
+        {
+            tx = target->GetPositionX();
+            ty = target->GetPositionY();
+            tz = target->GetPositionZ();
+        }
+    }
     float combatDistance = bot->GetCombatReach() + target->GetCombatReach();
     distance += combatDistance;
 
@@ -863,7 +883,7 @@ bool MovementAction::ReachCombatTo(Unit* target, float distance)
 
     // Avoid walking too far when moving towards each other
     float disToGo = bot->GetExactDist(tx, ty, tz) - distance;
-    if (disToGo >= 10.0f)
+    if (disToGo >= 6.0f)
         shortenTo = disToGo / 2 + distance;
 
     // if (bot->GetExactDist(tx, ty, tz) <= shortenTo)
@@ -1007,6 +1027,20 @@ void MovementAction::UpdateMovementState()
         bot->SendMovementFlagUpdate();
     }
 
+    // See if the bot is currently slowed, rooted, or otherwise unable to move
+    bool isCurrentlyRestricted = bot->isFrozen() || bot->IsPolymorphed() || bot->HasRootAura() || bot->HasStunAura() ||
+                                 bot->HasConfuseAura() || bot->HasUnitState(UNIT_STATE_LOST_CONTROL);
+
+    // Detect if movement restrictions have been lifted
+    if (wasMovementRestricted && !isCurrentlyRestricted && bot->IsAlive())
+    {
+        // CC just ended - refresh movement state to ensure animations play correctly
+        bot->SendMovementFlagUpdate();
+    }
+
+    // Save current state for the next check
+    wasMovementRestricted = isCurrentlyRestricted;
+    
     // Temporary speed increase in group
     // if (botAI->HasRealPlayerMaster()) {
     //     bot->SetSpeedRate(MOVE_RUN, 1.1f);
@@ -1583,11 +1617,6 @@ bool MovementAction::MoveAway(Unit* target, float distance, bool backwards)
 // just calculates average position of group and runs away from that position
 bool MovementAction::MoveFromGroup(float distance)
 {
-    LOG_ERROR("playerbots", "MovementAction::MoveFromGroup");
-    //if (Player* master = botAI->GetMaster())
-    //{
-    //    return MoveAway(master);
-    //}
     if (Group* group = bot->GetGroup())
     {
         uint32 mapId = bot->GetMapId();
@@ -1772,7 +1801,6 @@ const Movement::PointsArray MovementAction::SearchForBestPath(float x, float y, 
 
 bool FleeAction::Execute(Event event)
 {
-    // return Flee(AI_VALUE(Unit*, "current target"));
     return MoveAway(AI_VALUE(Unit*, "current target"), sPlayerbotAIConfig->fleeDistance, true);
 }
 
@@ -1782,6 +1810,10 @@ bool FleeAction::isUseful()
     {
         return false;
     }
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (target && target->IsInWorld() && !bot->IsWithinMeleeRange(target))
+        return false;
+
     return true;
 }
 
@@ -2022,7 +2054,7 @@ Position MovementAction::BestPositionForMeleeToFlee(Position pos, float radius)
     if (currentTarget)
     {
         // Normally, move to left or right is the best position
-        bool isTanking = (currentTarget->CanFreeMove()) && (currentTarget->GetVictim() == bot);
+        bool isTanking = (!currentTarget->isFrozen() && !currentTarget->HasRootAura()) && (currentTarget->GetVictim() == bot);
         float angle = bot->GetAngle(currentTarget);
         float angleLeft = angle + (float)M_PI / 2;
         float angleRight = angle - (float)M_PI / 2;
@@ -2237,7 +2269,9 @@ bool CombatFormationMoveAction::isUseful()
 bool CombatFormationMoveAction::Execute(Event event)
 {
     float dis = AI_VALUE(float, "disperse distance");
-    if (dis <= 0.0f)
+    if (dis <= 0.0f ||
+        (!bot->IsInCombat() && botAI->HasStrategy("stay", BotState::BOT_STATE_NON_COMBAT)) ||
+        (bot->IsInCombat() && botAI->HasStrategy("stay", BotState::BOT_STATE_COMBAT)))
         return false;
     Player* playerToLeave = NearestGroupMember(dis);
     if (playerToLeave && bot->GetExactDist(playerToLeave) < dis)
@@ -2732,4 +2766,178 @@ bool MoveFromGroupAction::Execute(Event event)
     if (!distance)
         distance = 20.0f; // flee distance from config is too small for this
     return MoveFromGroup(distance);
+}
+
+bool MoveAwayFromCreatureAction::Execute(Event event)
+{
+    GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
+    Creature* nearestCreature = bot->FindNearestCreature(creatureId, range, alive);
+
+    // Find all creatures with the specified Id
+    std::vector<Unit*> creatures;
+    for (const auto& guid : targets)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (unit && (alive && unit->IsAlive()) && unit->GetEntry() == creatureId)
+        {
+            creatures.push_back(unit);
+        }
+    }
+
+    if (creatures.empty())
+    {
+        return false;
+    }
+
+    // Search for a safe position
+    const int directions = 8;
+    const float increment = 3.0f;
+    float bestX = bot->GetPositionX();
+    float bestY = bot->GetPositionY();
+    float bestZ = bot->GetPositionZ();
+    float maxSafetyScore = -1.0f;
+
+    for (int i = 0; i < directions; ++i)
+    {
+        float angle = (i * 2 * M_PI) / directions;
+        for (float distance = increment; distance <= 30.0f; distance += increment)
+        {
+            float moveX = bot->GetPositionX() + distance * cos(angle);
+            float moveY = bot->GetPositionY() + distance * sin(angle);
+            float moveZ = bot->GetPositionZ();
+
+            // Check creature distance constraints
+            bool isSafeFromCreatures = true;
+            float minCreatureDist = std::numeric_limits<float>::max();
+            for (Unit* creature : creatures)
+            {
+                float dist = creature->GetExactDist2d(moveX, moveY);
+                if (dist < range)
+                {
+                    isSafeFromCreatures = false;
+                    break;
+                }
+                if (dist < minCreatureDist)
+                {
+                    minCreatureDist = dist;
+                }
+            }
+
+            if (isSafeFromCreatures && bot->IsWithinLOS(moveX, moveY, moveZ))
+            {
+                // A simple safety score: the minimum distance to any creature. Higher is better.
+                if (minCreatureDist > maxSafetyScore)
+                {
+                    maxSafetyScore = minCreatureDist;
+                    bestX = moveX;
+                    bestY = moveY;
+                    bestZ = moveZ;
+                }
+            }
+        }
+    }
+
+    // Move to the best position found
+    if (maxSafetyScore > 0.0f)
+    {
+        return MoveTo(bot->GetMapId(), bestX, bestY, bestZ, false, false, false, false,
+                      MovementPriority::MOVEMENT_COMBAT);
+    }
+
+    return false;
+}
+
+bool MoveAwayFromCreatureAction::isPossible()
+{
+    return bot->CanFreeMove();
+}
+
+bool MoveAwayFromPlayerWithDebuffAction::Execute(Event event)
+{
+    Player* closestPlayer = nullptr;
+    float minDistance = 0.0f;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+    {
+        return false;
+    }
+
+    std::vector<Player*> debuffedPlayers;
+
+    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+    {
+        Player* player = gref->GetSource();
+        if (player && player->IsAlive() && player->HasAura(spellId))
+        {
+            debuffedPlayers.push_back(player);
+        }
+    }
+
+    if (debuffedPlayers.empty())
+    {
+        return false;
+    }
+
+    // Search for a safe position
+    const int directions = 8;
+    const float increment = 3.0f;
+    float bestX = bot->GetPositionX();
+    float bestY = bot->GetPositionY();
+    float bestZ = bot->GetPositionZ();
+    float maxSafetyScore = -1.0f;
+
+    for (int i = 0; i < directions; ++i)
+    {
+        float angle = (i * 2 * M_PI) / directions;
+        for (float distance = increment; distance <= (range + 5.0f); distance += increment)
+        {
+            float moveX = bot->GetPositionX() + distance * cos(angle);
+            float moveY = bot->GetPositionY() + distance * sin(angle);
+            float moveZ = bot->GetPositionZ();
+
+            // Check creature distance constraints
+            bool isSafeFromDebuffedPlayer = true;
+            float minDebuffedPlayerDistance = std::numeric_limits<float>::max();
+            for (Unit* debuffedPlayer : debuffedPlayers)
+            {
+                float dist = debuffedPlayer->GetExactDist2d(moveX, moveY);
+                if (dist < range)
+                {
+                    isSafeFromDebuffedPlayer = false;
+                    break;
+                }
+                if (dist < minDebuffedPlayerDistance)
+                {
+                    minDebuffedPlayerDistance = dist;
+                }
+            }
+
+            if (isSafeFromDebuffedPlayer && bot->IsWithinLOS(moveX, moveY, moveZ))
+            {
+                // A simple safety score: the minimum distance to any debuffed player. Higher is better.
+                if (minDebuffedPlayerDistance > maxSafetyScore)
+                {
+                    maxSafetyScore = minDebuffedPlayerDistance;
+                    bestX = moveX;
+                    bestY = moveY;
+                    bestZ = moveZ;
+                }
+            }
+        }
+    }
+
+    // Move to the best position found
+    if (maxSafetyScore > 0.0f)
+    {
+        return MoveTo(bot->GetMapId(), bestX, bestY, bestZ, false, false, false, false,
+                      MovementPriority::MOVEMENT_COMBAT, true);
+    }
+
+    return false;
+}
+
+bool MoveAwayFromPlayerWithDebuffAction::isPossible()
+{
+    return bot->CanFreeMove();
 }

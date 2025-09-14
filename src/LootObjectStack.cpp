@@ -6,10 +6,12 @@
 #include "LootObjectStack.h"
 
 #include "LootMgr.h"
+#include "Object.h"
+#include "ObjectAccessor.h"
 #include "Playerbots.h"
 #include "Unit.h"
 
-#define MAX_LOOT_OBJECT_COUNT 10
+#define MAX_LOOT_OBJECT_COUNT 200
 
 LootTarget::LootTarget(ObjectGuid guid) : guid(guid), asOfTime(time(nullptr)) {}
 
@@ -85,7 +87,7 @@ void LootObject::Refresh(Player* bot, ObjectGuid lootGUID)
         bool hasAnyQuestItems = false;
 
         GameObjectQuestItemList const* items = sObjectMgr->GetGameObjectQuestItemList(go->GetEntry());
-        for (int i = 0; i < MAX_GAMEOBJECT_QUEST_ITEMS; i++)
+        for (size_t i = 0; i < MAX_GAMEOBJECT_QUEST_ITEMS; i++)
         {
             if (!items || i >= items->size())
                 break;
@@ -287,7 +289,7 @@ bool LootObject::IsLootPossible(Player* bot)
     if (reqItem && !bot->HasItemCount(reqItem, 1))
         return false;
 
-    if (abs(worldObj->GetPositionZ() - bot->GetPositionZ()) > INTERACTION_DISTANCE -2.0f)
+    if (abs(worldObj->GetPositionZ() - bot->GetPositionZ()) > INTERACTION_DISTANCE - 2.0f)
         return false;
 
     Creature* creature = botAI->GetCreature(guid);
@@ -296,6 +298,12 @@ bool LootObject::IsLootPossible(Player* bot)
         if (!bot->isAllowedToLoot(creature) && skillId != SKILL_SKINNING)
             return false;
     }
+
+    // Prevent bot from running to chests that are unlootable (e.g. Gunship Armory before completing the event) or on
+    // respawn time
+    GameObject* go = botAI->GetGameObject(guid);
+    if (go && (go->HasFlag(GAMEOBJECT_FLAGS, GO_FLAG_INTERACT_COND | GO_FLAG_NOT_SELECTABLE) || !go->isSpawned()))
+        return false;
 
     if (skillId == SKILL_NONE)
         return true;
@@ -312,29 +320,17 @@ bool LootObject::IsLootPossible(Player* bot)
     uint32 skillValue = uint32(bot->GetSkillValue(skillId));
     if (reqSkillValue > skillValue)
         return false;
-    
-    if (skillId == SKILL_MINING &&
-        !bot->HasItemCount(756, 1) &&
-        !bot->HasItemCount(778, 1) &&
-        !bot->HasItemCount(1819, 1) &&
-        !bot->HasItemCount(1893, 1) &&
-        !bot->HasItemCount(1959, 1) &&
-        !bot->HasItemCount(2901, 1) &&
-        !bot->HasItemCount(9465, 1) &&
-        !bot->HasItemCount(20723, 1) &&
-        !bot->HasItemCount(40772, 1) &&
-        !bot->HasItemCount(40892, 1) &&
-        !bot->HasItemCount(40893, 1))
+
+    if (skillId == SKILL_MINING && !bot->HasItemCount(756, 1) && !bot->HasItemCount(778, 1) &&
+        !bot->HasItemCount(1819, 1) && !bot->HasItemCount(1893, 1) && !bot->HasItemCount(1959, 1) &&
+        !bot->HasItemCount(2901, 1) && !bot->HasItemCount(9465, 1) && !bot->HasItemCount(20723, 1) &&
+        !bot->HasItemCount(40772, 1) && !bot->HasItemCount(40892, 1) && !bot->HasItemCount(40893, 1))
     {
         return false;  // Bot is missing a mining pick
     }
-    
-    if (skillId == SKILL_SKINNING &&
-        !bot->HasItemCount(7005, 1) &&
-        !bot->HasItemCount(40772, 1) &&
-        !bot->HasItemCount(40893, 1) &&
-        !bot->HasItemCount(12709, 1) &&
-        !bot->HasItemCount(19901, 1))
+
+    if (skillId == SKILL_SKINNING && !bot->HasItemCount(7005, 1) && !bot->HasItemCount(40772, 1) &&
+        !bot->HasItemCount(40893, 1) && !bot->HasItemCount(12709, 1) && !bot->HasItemCount(19901, 1))
     {
         return false;  // Bot is missing a skinning knife
     }
@@ -371,42 +367,45 @@ void LootObjectStack::Clear() { availableLoot.clear(); }
 
 bool LootObjectStack::CanLoot(float maxDistance)
 {
-    std::vector<LootObject> ordered = OrderByDistance(maxDistance);
-    return !ordered.empty();
+    LootObject nearest = GetNearest(maxDistance);
+    return !nearest.IsEmpty();
 }
 
 LootObject LootObjectStack::GetLoot(float maxDistance)
 {
-    std::vector<LootObject> ordered = OrderByDistance(maxDistance);
-    return ordered.empty() ? LootObject() : *ordered.begin();
+    LootObject nearest = GetNearest(maxDistance);
+    return nearest.IsEmpty() ? LootObject() : nearest;
 }
-std::vector<LootObject> LootObjectStack::OrderByDistance(float maxDistance)
+
+LootObject LootObjectStack::GetNearest(float maxDistance)
 {
     availableLoot.shrink(time(nullptr) - 30);
 
-    std::map<float, LootObject> sortedMap;
+    LootObject nearest;
+    float nearestDistance = std::numeric_limits<float>::max();
+
     LootTargetList safeCopy(availableLoot);
     for (LootTargetList::iterator i = safeCopy.begin(); i != safeCopy.end(); i++)
     {
         ObjectGuid guid = i->guid;
-        LootObject lootObject(bot, guid);
-        if (!lootObject.IsLootPossible(bot)) // Ensure loot object is valid
-            continue;
 
-        WorldObject* worldObj = lootObject.GetWorldObject(bot);
-        if (!worldObj) // Prevent null pointer dereference
-        {
+        WorldObject* worldObj = ObjectAccessor::GetWorldObject(*bot, guid);
+        if (!worldObj)
             continue;
-        }
 
         float distance = bot->GetDistance(worldObj);
-        if (!maxDistance || distance <= maxDistance)
-            sortedMap[distance] = lootObject;
+
+        if (distance >= nearestDistance || (maxDistance && distance > maxDistance))
+            continue;
+
+        LootObject lootObject(bot, guid);
+
+        if (!lootObject.IsLootPossible(bot))
+            continue;
+
+        nearestDistance = distance;
+        nearest = lootObject;
     }
 
-    std::vector<LootObject> result;
-    for (auto& [_, lootObject] : sortedMap)
-        result.push_back(lootObject);
-
-    return result;
+    return nearest;
 }

@@ -3,9 +3,15 @@
 
 #include "Duration.h"
 #include "MovementActions.h"
+#include "NewRpgBaseAction.h"
+#include "NewRpgInfo.h"
 #include "NewRpgStrategy.h"
-#include "TravelMgr.h"
+#include "Object.h"
+#include "ObjectDefines.h"
+#include "ObjectGuid.h"
 #include "PlayerbotAI.h"
+#include "QuestDef.h"
+#include "TravelMgr.h"
 
 class TellRpgStatusAction : public Action
 {
@@ -15,65 +21,86 @@ public:
     bool Execute(Event event) override;
 };
 
-class NewRpgStatusUpdateAction : public Action
+class StartRpgDoQuestAction : public Action
 {
 public:
-    NewRpgStatusUpdateAction(PlayerbotAI* botAI) : Action(botAI, "new rpg status update") {}
+    StartRpgDoQuestAction(PlayerbotAI* botAI) : Action(botAI, "start rpg do quest") {}
+
     bool Execute(Event event) override;
+};
+
+class NewRpgStatusUpdateAction : public NewRpgBaseAction
+{
+public:
+    NewRpgStatusUpdateAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg status update")
+    {
+        // int statusCount = RPG_STATUS_END - 1;
+
+        // transitionMat.resize(statusCount, std::vector<int>(statusCount, 0));
+
+        // transitionMat[RPG_IDLE][RPG_GO_GRIND] = 20;
+        // transitionMat[RPG_IDLE][RPG_GO_CAMP] = 15;
+        // transitionMat[RPG_IDLE][RPG_WANDER_NPC] = 30;
+        // transitionMat[RPG_IDLE][RPG_DO_QUEST] = 35;
+    }
+    bool Execute(Event event) override;
+
 protected:
-    // const int32 setGrindInterval = 5 * 60 * 1000;
-    // const int32 setNpcInterval = 1 * 60 * 1000;
-    const int32 statusNearNpcDuration = 5 * 60 * 1000;
-    const int32 statusNearRandomDuration = 5 * 60 * 1000;
+    // static NewRpgStatusTransitionProb transitionMat;
+    const int32 statusWanderNpcDuration = 5 * 60 * 1000;
+    const int32 statusWanderRandomDuration = 5 * 60 * 1000;
     const int32 statusRestDuration = 30 * 1000;
-    WorldPosition SelectRandomGrindPos();
-    WorldPosition SelectRandomInnKeeperPos();
+    const int32 statusDoQuestDuration = 30 * 60 * 1000;
 };
 
-class NewRpgGoFarAwayPosAction : public MovementAction
+class NewRpgGoGrindAction : public NewRpgBaseAction
 {
 public:
-    NewRpgGoFarAwayPosAction(PlayerbotAI* botAI, std::string name) : MovementAction(botAI, name) {}
-    // bool Execute(Event event) override;
-    bool MoveFarTo(WorldPosition dest);
+    NewRpgGoGrindAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg go grind") {}
+    bool Execute(Event event) override;
+};
+
+class NewRpgGoCampAction : public NewRpgBaseAction
+{
+public:
+    NewRpgGoCampAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg go camp") {}
+    bool Execute(Event event) override;
+};
+
+class NewRpgWanderRandomAction : public NewRpgBaseAction
+{
+public:
+    NewRpgWanderRandomAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg wander random") {}
+    bool Execute(Event event) override;
+};
+
+class NewRpgWanderNpcAction : public NewRpgBaseAction
+{
+public:
+    NewRpgWanderNpcAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg move npcs") {}
+    bool Execute(Event event) override;
+
+    const uint32 npcStayTime = 8 * 1000;
+};
+
+class NewRpgDoQuestAction : public NewRpgBaseAction
+{
+public:
+    NewRpgDoQuestAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg do quest") {}
+    bool Execute(Event event) override;
 
 protected:
-    // WorldPosition dest;
-    const float pathFinderDis = 70.0f; // path finder
-    const uint32 stuckTime = 5 * 60 * 1000;
+    bool DoIncompleteQuest();
+    bool DoCompletedQuest();
+
+    const uint32 poiStayTime = 5 * 60 * 1000;
 };
 
-class NewRpgGoGrindAction : public NewRpgGoFarAwayPosAction
+class NewRpgTravelFlightAction : public NewRpgBaseAction
 {
 public:
-    NewRpgGoGrindAction(PlayerbotAI* botAI) : NewRpgGoFarAwayPosAction(botAI, "new rpg go grind") {}
+    NewRpgTravelFlightAction(PlayerbotAI* botAI) : NewRpgBaseAction(botAI, "new rpg travel flight") {}
     bool Execute(Event event) override;
-};
-
-class NewRpgGoInnKeeperAction : public NewRpgGoFarAwayPosAction
-{
-public:
-    NewRpgGoInnKeeperAction(PlayerbotAI* botAI) : NewRpgGoFarAwayPosAction(botAI, "new rpg go innkeeper") {}
-    bool Execute(Event event) override;
-};
-
-
-class NewRpgMoveRandomAction : public MovementAction
-{
-public:
-    NewRpgMoveRandomAction(PlayerbotAI* botAI) : MovementAction(botAI, "new rpg move random") {}
-    bool Execute(Event event) override;
-protected:
-    const float moveStep = 50.0f;
-};
-
-class NewRpgMoveNpcAction : public MovementAction
-{
-public:
-    NewRpgMoveNpcAction(PlayerbotAI* botAI) : MovementAction(botAI, "new rpg move npcs") {}
-    bool Execute(Event event) override;
-protected:
-    const uint32 stayTime = 8 * 1000;
 };
 
 #endif

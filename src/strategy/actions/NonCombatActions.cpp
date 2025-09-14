@@ -17,7 +17,7 @@ bool DrinkAction::Execute(Event event)
     if (!hasMana)
         return false;
 
-    if (sPlayerbotAIConfig->freeFood)
+    if (botAI->HasCheat(BotCheatMask::food))
     {
         // if (bot->IsNonMeleeSpellCast(true))
         //     return false;
@@ -40,13 +40,13 @@ bool DrinkAction::Execute(Event event)
         float delay;
 
         if (!bot->InBattleground())
-            delay = 27000.0f * (100 - p) / 100.0f;
+            delay = 18000.0f * (100 - p) / 100.0f;
         else
-            delay = 20000.0f * (100 - p) / 100.0f;
+            delay = 12000.0f * (100 - p) / 100.0f;
 
         botAI->SetNextCheckDelay(delay);
 
-        bot->AddAura(24707, bot);
+        bot->AddAura(25990, bot);
         return true;
         // return botAI->CastSpell(24707, bot);
     }
@@ -54,11 +54,11 @@ bool DrinkAction::Execute(Event event)
     return UseItemAction::Execute(event);
 }
 
-bool DrinkAction::isUseful() { return UseItemAction::isUseful() && AI_VALUE2(uint8, "mana", "self target") < 85; }
+bool DrinkAction::isUseful() { return UseItemAction::isUseful() && AI_VALUE2(uint8, "mana", "self target") < 100; }
 
 bool DrinkAction::isPossible()
 {
-    return !bot->IsInCombat() && (sPlayerbotAIConfig->freeFood || UseItemAction::isPossible());
+    return !bot->IsInCombat() && (botAI->HasCheat(BotCheatMask::food) || UseItemAction::isPossible());
 }
 
 bool EatAction::Execute(Event event)
@@ -66,7 +66,7 @@ bool EatAction::Execute(Event event)
     if (bot->IsInCombat())
         return false;
 
-    if (sPlayerbotAIConfig->freeFood)
+    if (botAI->HasCheat(BotCheatMask::food))
     {
         // if (bot->IsNonMeleeSpellCast(true))
         //     return false;
@@ -90,13 +90,13 @@ bool EatAction::Execute(Event event)
         float delay;
 
         if (!bot->InBattleground())
-            delay = 27000.0f * (100 - p) / 100.0f;
+            delay = 18000.0f * (100 - p) / 100.0f;
         else
-            delay = 20000.0f * (100 - p) / 100.0f;
+            delay = 12000.0f * (100 - p) / 100.0f;
 
         botAI->SetNextCheckDelay(delay);
 
-        bot->AddAura(24707, bot);
+        bot->AddAura(25990, bot);
         return true;
     }
 
@@ -107,5 +107,5 @@ bool EatAction::isUseful() { return UseItemAction::isUseful() && AI_VALUE2(uint8
 
 bool EatAction::isPossible()
 {
-    return !bot->IsInCombat() && (sPlayerbotAIConfig->freeFood || UseItemAction::isPossible());
+    return !bot->IsInCombat() && (botAI->HasCheat(BotCheatMask::food) || UseItemAction::isPossible());
 }

@@ -53,6 +53,13 @@ bool AttackMyTargetAction::Execute(Event event)
 
 bool AttackAction::Attack(Unit* target, bool with_pet /*true*/)
 {
+    Unit* oldTarget = context->GetValue<Unit*>("current target")->Get();
+    bool shouldMelee = bot->IsWithinMeleeRange(target) || botAI->IsMelee(bot);
+    
+    bool sameTarget = oldTarget == target && bot->GetVictim() == target;
+    bool inCombat = botAI->GetState() == BOT_STATE_COMBAT;
+    bool sameAttackMode = bot->HasUnitState(UNIT_STATE_MELEE_ATTACKING) == shouldMelee;
+  
     if (bot->GetMotionMaster()->GetCurrentMovementGeneratorType() == FLIGHT_MOTION_TYPE ||
         bot->HasUnitState(UNIT_STATE_IN_FLIGHT))
     {
@@ -72,52 +79,53 @@ bool AttackAction::Attack(Unit* target, bool with_pet /*true*/)
 
     if (!target->IsInWorld())
     {
+        if (verbose)
+            botAI->TellError(std::string(target->GetName()) + " is no longer in the world.");
+        return false;
+    }
+
+   if ((sPlayerbotAIConfig->IsInPvpProhibitedZone(bot->GetZoneId()) || 
+     sPlayerbotAIConfig->IsInPvpProhibitedArea(bot->GetAreaId()))
+        && (target->IsPlayer() || target->IsPet()))
+    {
+        if (verbose)
+            botAI->TellError("I cannot attack other players in PvP prohibited areas.");
+
+        return false;
+    }
+
+    if (bot->IsFriendlyTo(target))
+    {
+        if (verbose)
+            botAI->TellError(std::string(target->GetName()) + " is friendly to me.");
+        return false;
+    }
+
+    if (target->isDead())
+    {
+        if (verbose)
+            botAI->TellError(std::string(target->GetName()) + " is dead.");
+        return false;
+    }
+
+    if (!bot->IsWithinLOSInMap(target))
+    {
+        if (verbose)
+            botAI->TellError(std::string(target->GetName()) + " is not in my sight.");
+        return false;
+    }
+
+    if (sameTarget && inCombat && sameAttackMode)
+    {
+        if (verbose)
+            botAI->TellError("I am already attacking " + std::string(target->GetName()) + ".");
         return false;
     }
 
     if (!bot->IsValidAttackTarget(target))
     {
         if (verbose)
-            botAI->TellError("I cannot attack an invalid target");
-
-        return false;
-    }
-
-    std::ostringstream msg;
-    msg << target->GetName();
-
-    if (bot->IsFriendlyTo(target))
-    {
-        msg << " is friendly to me";
-        if (verbose)
-            botAI->TellError(msg.str());
-
-        return false;
-    }
-
-    if (!bot->IsWithinLOSInMap(target))
-    {
-        msg << " is not in my sight";
-        if (verbose)
-            botAI->TellError(msg.str());
-        
-        return false;
-    }
-
-    if (target->isDead())
-    {
-        msg << " is dead";
-        if (verbose)
-            botAI->TellError(msg.str());
-
-        return false;
-    }
-
-    if (sPlayerbotAIConfig->IsInPvpProhibitedZone(bot->GetZoneId())
-        && (target->IsPlayer() || target->IsPet()))
-    {
-        if (verbose)
-            botAI->TellError("I cannot attack others in PvP prohibited zones");
+            botAI->TellError("I cannot attack an invalid target.");
 
         return false;
     }
@@ -131,25 +139,19 @@ bool AttackAction::Attack(Unit* target, bool with_pet /*true*/)
     ObjectGuid guid = target->GetGUID();
     bot->SetSelection(target->GetGUID());
 
-    Unit* oldTarget = context->GetValue<Unit*>("current target")->Get();
-    bool melee = bot->IsWithinMeleeRange(target) || botAI->IsMelee(bot);
-
-    if (oldTarget == target && botAI->GetState() == BOT_STATE_COMBAT && bot->GetVictim() == target && (bot->HasUnitState(UNIT_STATE_MELEE_ATTACKING) == melee))
-        return false;
-
-    context->GetValue<Unit*>("old target")->Set(oldTarget);
+        context->GetValue<Unit*>("old target")->Set(oldTarget);
 
     context->GetValue<Unit*>("current target")->Set(target);
     context->GetValue<LootObjectStack*>("available loot")->Get()->Add(guid);
 
     LastMovement& lastMovement = AI_VALUE(LastMovement&, "last movement");
-    if (lastMovement.priority < MovementPriority::MOVEMENT_COMBAT && bot->isMoving())
+    bool moveControlled = bot->GetMotionMaster()->GetMotionSlotType(MOTION_SLOT_CONTROLLED) != NULL_MOTION_TYPE;
+    if (lastMovement.priority < MovementPriority::MOVEMENT_COMBAT && bot->isMoving() && !moveControlled)
     {
         AI_VALUE(LastMovement&, "last movement").clear();
         bot->GetMotionMaster()->Clear(false);
         bot->StopMoving();
     }
-
 
     if (IsMovingAllowed() && !bot->HasInArc(CAST_ANGLE_IN_FRONT, target))
     {
@@ -157,7 +159,7 @@ bool AttackAction::Attack(Unit* target, bool with_pet /*true*/)
     }
     botAI->ChangeEngine(BOT_STATE_COMBAT);
     
-    bot->Attack(target, melee);
+    bot->Attack(target, shouldMelee);
     /* prevent pet dead immediately in group */
     // if (bot->GetMap()->IsDungeon() && bot->GetGroup() && !target->IsInCombat()) {
     //     with_pet = false;

@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "DBCStores.h"
+#include "ItemEnchantmentMgr.h"
 #include "ItemTemplate.h"
 #include "ObjectMgr.h"
 #include "PlayerbotAI.h"
@@ -28,12 +29,12 @@ void StatsCollector::CollectItemStats(ItemTemplate const* proto)
 {
     if (proto->IsRangedWeapon())
     {
-        uint32 val = (proto->Damage[0].DamageMin + proto->Damage[0].DamageMax) * 1000 / 2 / proto->Delay;
+        float val = (proto->Damage[0].DamageMin + proto->Damage[0].DamageMax) * 1000 / 2 / proto->Delay;
         stats[STATS_TYPE_RANGED_DPS] += val;
     }
     else if (proto->IsWeapon())
     {
-        uint32 val = (proto->Damage[0].DamageMin + proto->Damage[0].DamageMax) * 1000 / 2 / proto->Delay;
+        float val = (proto->Damage[0].DamageMin + proto->Damage[0].DamageMax) * 1000 / 2 / proto->Delay;
         stats[STATS_TYPE_MELEE_DPS] += val;
     }
     stats[STATS_TYPE_ARMOR] += proto->Armor;
@@ -205,7 +206,7 @@ void StatsCollector::CollectSpellStats(uint32 spellId, float multiplier, int32 s
     }
 }
 
-void StatsCollector::CollectEnchantStats(SpellItemEnchantmentEntry const* enchant)
+void StatsCollector::CollectEnchantStats(SpellItemEnchantmentEntry const* enchant, uint32 default_enchant_amount)
 {
     for (int s = 0; s < MAX_SPELL_ITEM_ENCHANTMENT_EFFECTS; ++s)
     {
@@ -231,6 +232,10 @@ void StatsCollector::CollectEnchantStats(SpellItemEnchantmentEntry const* enchan
             }
             case ITEM_ENCHANTMENT_TYPE_STAT:
             {
+                // for item random suffix
+                if (!enchant_amount)
+                    enchant_amount = default_enchant_amount;
+
                 if (!enchant_amount)
                 {
                     break;
@@ -250,7 +255,7 @@ bool StatsCollector::SpecialSpellFilter(uint32 spellId)
     // trinket
     switch (spellId)
     {
-        case 60764: // Totem of Splintering
+        case 60764:  // Totem of Splintering
             if (type_ & (CollectorType::SPELL))
                 return true;
             break;
@@ -431,10 +436,10 @@ void StatsCollector::CollectByItemStatType(uint32 itemStatType, int32 val)
     switch (itemStatType)
     {
         case ITEM_MOD_MANA:
-            stats[STATS_TYPE_MANA_REGENERATION] += val / 10;
+            stats[STATS_TYPE_MANA_REGENERATION] += (float)val / 10;
             break;
         case ITEM_MOD_HEALTH:
-            stats[STATS_TYPE_STAMINA] += val / 15;
+            stats[STATS_TYPE_STAMINA] += (float)val / 15;
             break;
         case ITEM_MOD_AGILITY:
             stats[STATS_TYPE_AGILITY] += val;
@@ -742,11 +747,11 @@ void StatsCollector::HandleApplyAura(const SpellEffectInfo& effectInfo, float mu
     }
 }
 
-int32 StatsCollector::AverageValue(const SpellEffectInfo& effectInfo)
+float StatsCollector::AverageValue(const SpellEffectInfo& effectInfo)
 {
-    float basePointsPerLevel = effectInfo.RealPointsPerLevel;
-    int32 basePoints = effectInfo.BasePoints;
-    int32 randomPoints = int32(effectInfo.DieSides);
+    // float basePointsPerLevel = effectInfo.RealPointsPerLevel; //not used, line marked for removal.
+    float basePoints = effectInfo.BasePoints;
+    int32 randomPoints = effectInfo.DieSides;
 
     switch (randomPoints)
     {
@@ -756,7 +761,7 @@ int32 StatsCollector::AverageValue(const SpellEffectInfo& effectInfo)
             basePoints += 1;
             break;
         default:
-            int32 randvalue = (1 + randomPoints) / 2;
+            float randvalue = (1 + randomPoints) / 2.0f;
             basePoints += randvalue;
             break;
     }
@@ -767,7 +772,7 @@ bool StatsCollector::CheckSpellValidation(uint32 spellFamilyName, flag96 spelFal
 {
     if (PlayerbotAI::Class2SpellFamilyName(cls_) != spellFamilyName)
         return false;
-    
+
     bool isHealingSpell = PlayerbotAI::IsHealingSpell(spellFamilyName, spelFalimyFlags);
     // strict to healer
     if (strict && (type_ & CollectorType::SPELL_HEAL))
@@ -802,7 +807,7 @@ bool StatsCollector::CheckSpellValidation(uint32 spellFamilyName, flag96 spelFal
     if (cls_ == CLASS_PALADIN && spellFamilyName == SPELLFAMILY_PALADIN && (type_ & CollectorType::MELEE_DMG))
     {
         uint32 retributionFlagsA = 0x0;
-        uint32 retributionFlagsB = 0x100000;  // shield of righteouness
+        uint32 retributionFlagsB = 0x100000 | 0x40;  // shield of righteouness | holy shield
         uint32 retributionFlagsC = 0x0;
         flag96 invalidFlags = {retributionFlagsA, retributionFlagsB, retributionFlagsC};
         if (spelFalimyFlags & invalidFlags)

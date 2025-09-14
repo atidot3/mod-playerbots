@@ -5,10 +5,11 @@
 
 #include "GrindTargetValue.h"
 
+#include "NewRpgInfo.h"
 #include "Playerbots.h"
 #include "ReputationMgr.h"
-#include "SharedDefines.h"
 #include "ServerFacade.h"
+#include "SharedDefines.h"
 
 Unit* GrindTargetValue::Calculate()
 {
@@ -33,7 +34,8 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
     Group* group = bot->GetGroup();
     Player* master = GetMaster();
 
-    if (master && (master == bot || master->GetMapId() != bot->GetMapId() || master->IsBeingTeleported() || !GET_PLAYERBOT_AI(master)))
+    if (master && (master == bot || master->GetMapId() != bot->GetMapId() || master->IsBeingTeleported() ||
+                   !GET_PLAYERBOT_AI(master)))
         master = nullptr;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
@@ -52,7 +54,7 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
 
     float distance = 0;
     Unit* result = nullptr;
-    // std::unordered_map<uint32, bool> needForQuestMap;
+    std::unordered_map<uint32, bool> needForQuestMap;
 
     for (ObjectGuid const guid : targets)
     {
@@ -88,29 +90,16 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
         // !sRandomPlayerbotMgr->IsRandomBot(bot)) continue;
 
         // Bots in bot-groups no have a more limited range to look for grind target
-        if (!bot->InBattleground() && master && botAI->HasStrategy("follow", BotState::BOT_STATE_NON_COMBAT)
-            && sServerFacade->GetDistance2d(master, unit) > sPlayerbotAIConfig->lootDistance)
+        if (!bot->InBattleground() && master && botAI->HasStrategy("follow", BotState::BOT_STATE_NON_COMBAT) &&
+            sServerFacade->GetDistance2d(master, unit) > sPlayerbotAIConfig->lootDistance)
         {
             if (botAI->HasStrategy("debug grind", BotState::BOT_STATE_NON_COMBAT))
                 botAI->TellMaster(chat->FormatWorldobject(unit) + " ignored (far from master).");
             continue;
         }
 
-		if (!bot->InBattleground() && (int)unit->GetLevel() - (int)bot->GetLevel() > 4 && !unit->GetGUID().IsPlayer())
-		    continue;
-
-        // if (needForQuestMap.find(unit->GetEntry()) == needForQuestMap.end())
-        //     needForQuestMap[unit->GetEntry()] = needForQuest(unit);
-
-        // if (!needForQuestMap[unit->GetEntry()])
-        // {
-        //     Creature* creature = dynamic_cast<Creature*>(unit);
-        //     if ((urand(0, 100) < 60 || (context->GetValue<TravelTarget*>("travel target")->Get()->isWorking() &&
-        //         context->GetValue<TravelTarget*>("travel target")->Get()->getDestination()->getName() != "GrindTravelDestination")))
-        //     {
-        //         continue;
-        //     }
-        // }
+        if (!bot->InBattleground() && (int)unit->GetLevel() - (int)bot->GetLevel() > 4 && !unit->GetGUID().IsPlayer())
+            continue;
 
         if (Creature* creature = unit->ToCreature())
             if (CreatureTemplate const* CreatureTemplate = creature->GetCreatureTemplate())
@@ -120,6 +109,21 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
         if (!bot->IsWithinLOSInMap(unit))
         {
             continue;
+        }
+
+        bool inactiveGrindStatus = botAI->rpgInfo.status != RPG_WANDER_RANDOM && botAI->rpgInfo.status != RPG_IDLE;
+
+        float aggroRange = 30.0f;
+        if (unit->ToCreature())
+            aggroRange = std::min(30.0f, unit->ToCreature()->GetAggroRange(bot) + 10.0f);
+        bool outOfAggro = unit->ToCreature() && bot->GetDistance(unit) > aggroRange;
+        if (inactiveGrindStatus && outOfAggro)
+        {
+            if (needForQuestMap.find(unit->GetEntry()) == needForQuestMap.end())
+                needForQuestMap[unit->GetEntry()] = needForQuest(unit);
+
+            if (!needForQuestMap[unit->GetEntry()])
+                continue;
         }
 
         if (group)
@@ -155,8 +159,6 @@ Unit* GrindTargetValue::FindTargetForGrinding(uint32 assistCount)
 
 bool GrindTargetValue::needForQuest(Unit* target)
 {
-    bool justCheck = (bot->GetGUID() == target->GetGUID());
-
     QuestStatusMap& questMap = bot->getQuestStatusMap();
     for (auto& quest : questMap)
     {
@@ -170,16 +172,9 @@ bool GrindTargetValue::needForQuest(Unit* target)
 
         QuestStatus status = bot->GetQuestStatus(questId);
 
-        if ((status == QUEST_STATUS_COMPLETE && !bot->GetQuestRewardStatus(questId)))
+        if (status == QUEST_STATUS_INCOMPLETE)
         {
-            if (!justCheck && !target->hasInvolvedQuest(questId))
-                continue;
-
-            return true;
-        }
-        else if (status == QUEST_STATUS_INCOMPLETE)
-        {
-            QuestStatusData* questStatus = sTravelMgr->getQuestStatus(bot, questId);
+            const QuestStatusData* questStatus = &bot->getQuestStatusMap()[questId];
 
             if (questTemplate->GetQuestLevel() > bot->GetLevel() + 5)
                 continue;
@@ -193,35 +188,20 @@ bool GrindTargetValue::needForQuest(Unit* target)
                     int required = questTemplate->RequiredNpcOrGoCount[j];
                     int available = questStatus->CreatureOrGOCount[j];
 
-                    if (required && available < required && (target->GetEntry() == entry || justCheck))
+                    if (required && available < required && target->GetEntry() == entry)
                         return true;
                 }
-
-                if (justCheck)
-                {
-                    int32 itemId = questTemplate->RequiredItemId[j];
-
-                    if (itemId && itemId > 0)
-                    {
-                        uint32 required = questTemplate->RequiredItemCount[j];
-                        uint32 available = questStatus->ItemCount[j];
-
-                        if (required && available < required)
-                            return true;
-                    }
-                }
             }
+        }
+    }
 
-            if (!justCheck)
+    if (CreatureTemplate const* data = sObjectMgr->GetCreatureTemplate(target->GetEntry()))
+    {
+        if (uint32 lootId = data->lootid)
+        {
+            if (LootTemplates_Creature.HaveQuestLootForPlayer(lootId, bot))
             {
-                if (CreatureTemplate const* data = sObjectMgr->GetCreatureTemplate(target->GetEntry()))
-                {
-                    if (uint32 lootId = data->lootid)
-                    {
-                        if (LootTemplates_Creature.HaveQuestLootForPlayer(lootId, bot))
-                            return true;
-                    }
-                }
+                return true;
             }
         }
     }

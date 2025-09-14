@@ -5,6 +5,7 @@
 
 #include "RogueAiObjectContext.h"
 
+#include "AiObjectContext.h"
 #include "AssassinationRogueStrategy.h"
 #include "DpsRogueStrategy.h"
 #include "GenericRogueNonCombatStrategy.h"
@@ -173,7 +174,7 @@ private:
     static Action* check_stealth(PlayerbotAI* botAI) { return new CheckStealthAction(botAI); }
     static Action* sap(PlayerbotAI* botAI) { return new CastSapAction(botAI); }
     static Action* unstealth(PlayerbotAI* botAI) { return new UnstealthAction(botAI); }
-    static Action* envenom(PlayerbotAI* ai) { return new EnvenomAction(ai); }
+    static Action* envenom(PlayerbotAI* ai) { return new CastEnvenomAction(ai); }
     static Action* tricks_of_the_trade_on_main_tank(PlayerbotAI* ai)
     {
         return new CastTricksOfTheTradeOnMainTankAction(ai);
@@ -185,10 +186,45 @@ private:
     static Action* killing_spree(PlayerbotAI* ai) { return new CastKillingSpreeAction(ai); }
 };
 
-RogueAiObjectContext::RogueAiObjectContext(PlayerbotAI* botAI) : AiObjectContext(botAI)
+SharedNamedObjectContextList<Strategy> RogueAiObjectContext::sharedStrategyContexts;
+SharedNamedObjectContextList<Action> RogueAiObjectContext::sharedActionContexts;
+SharedNamedObjectContextList<Trigger> RogueAiObjectContext::sharedTriggerContexts;
+SharedNamedObjectContextList<UntypedValue> RogueAiObjectContext::sharedValueContexts;
+
+RogueAiObjectContext::RogueAiObjectContext(PlayerbotAI* botAI)
+    : AiObjectContext(botAI, sharedStrategyContexts, sharedActionContexts,
+                      sharedTriggerContexts, sharedValueContexts)
 {
+}
+
+void RogueAiObjectContext::BuildSharedContexts()
+{
+    BuildSharedStrategyContexts(sharedStrategyContexts);
+    BuildSharedActionContexts(sharedActionContexts);
+    BuildSharedTriggerContexts(sharedTriggerContexts);
+    BuildSharedValueContexts(sharedValueContexts);
+}
+
+void RogueAiObjectContext::BuildSharedStrategyContexts(SharedNamedObjectContextList<Strategy>& strategyContexts)
+{
+    AiObjectContext::BuildSharedStrategyContexts(strategyContexts);
     strategyContexts.Add(new RogueStrategyFactoryInternal());
     strategyContexts.Add(new RogueCombatStrategyFactoryInternal());
+}
+
+void RogueAiObjectContext::BuildSharedActionContexts(SharedNamedObjectContextList<Action>& actionContexts)
+{
+    AiObjectContext::BuildSharedActionContexts(actionContexts);
     actionContexts.Add(new RogueAiObjectContextInternal());
+}
+
+void RogueAiObjectContext::BuildSharedTriggerContexts(SharedNamedObjectContextList<Trigger>& triggerContexts)
+{
+    AiObjectContext::BuildSharedTriggerContexts(triggerContexts);
     triggerContexts.Add(new RogueTriggerFactoryInternal());
+}
+
+void RogueAiObjectContext::BuildSharedValueContexts(SharedNamedObjectContextList<UntypedValue>& valueContexts)
+{
+    AiObjectContext::BuildSharedValueContexts(valueContexts);
 }

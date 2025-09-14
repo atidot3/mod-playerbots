@@ -9,6 +9,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "ServerFacade.h"
+#include "SharedDefines.h"
 
 static float GetSpeedInMotion(Unit* target)
 {
@@ -18,7 +19,7 @@ static float GetSpeedInMotion(Unit* target)
 bool EnemyTooCloseForSpellTrigger::IsActive()
 {
     Unit* target = AI_VALUE(Unit*, "current target");
-    return target && (target->GetVictim() != bot || target->isFrozen() || !target->CanFreeMove()) &&
+    return target && (target->GetVictim() != bot || target->isFrozen() || target->HasRootAura()) &&
            target->GetObjectSize() <= 10.0f && target->IsWithinCombatRange(bot, MIN_MELEE_REACH);
     //     Unit* target = AI_VALUE(Unit*, "current target");
     //     if (!target) {
@@ -56,8 +57,19 @@ bool EnemyTooCloseForSpellTrigger::IsActive()
 bool EnemyTooCloseForAutoShotTrigger::IsActive()
 {
     Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target)
+        return false;
 
-    return target && (target->GetVictim() != bot || target->isFrozen() || !target->CanFreeMove()) &&
+    // hunter move away after casting immolation/explosive trap
+    bool trapToCast = bot->getClass() == CLASS_HUNTER;
+    uint32 spellId = AI_VALUE2(uint32, "spell id", "immolation trap");
+    if (!spellId)
+        trapToCast = false;
+
+    if (spellId && bot->HasSpellCooldown(spellId))
+        trapToCast = false;
+
+    return !trapToCast && (target->GetVictim() != bot || target->isFrozen() || target->HasRootAura()) &&
            bot->IsWithinMeleeRange(target);
 
     // if (target->GetTarget() == bot->GetGUID() && !bot->GetGroup() && !target->HasUnitState(UNIT_STATE_ROOT) &&
@@ -88,7 +100,7 @@ bool EnemyTooCloseForShootTrigger::IsActive()
     Unit* target = AI_VALUE(Unit*, "current target");
     // target->IsWithinCombatRange()
 
-    return target && (target->GetVictim() != bot || target->isFrozen() || !target->CanFreeMove()) &&
+    return target && (target->GetVictim() != bot || target->isFrozen() || target->HasRootAura()) &&
            target->IsWithinCombatRange(bot, MIN_MELEE_REACH);
 
     //     Unit* target = AI_VALUE(Unit*, "current target");
@@ -201,4 +213,85 @@ PartyMemberToHealOutOfSpellRangeTrigger::PartyMemberToHealOutOfSpellRangeTrigger
 bool FarFromMasterTrigger::IsActive()
 {
     return sServerFacade->IsDistanceGreaterThan(AI_VALUE2(float, "distance", "master target"), distance);
+}
+
+bool TooCloseToCreatureTrigger::TooCloseToCreature(uint32 creatureId, float range, bool alive)
+{
+    Creature* nearestCreature = bot->FindNearestCreature(creatureId, range, alive);
+    return nearestCreature != nullptr;
+}
+
+bool TooCloseToPlayerWithDebuffTrigger::TooCloseToPlayerWithDebuff(uint32 spellId, float range)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+    {
+        return false;
+    }
+
+    std::vector<Player*> debuffedPlayers;
+
+    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+    {
+        Player* player = gref->GetSource();
+        if (player && player->IsAlive() && player->HasAura(spellId))
+        {
+            debuffedPlayers.push_back(player);
+        }
+    }
+
+    if (debuffedPlayers.empty())
+    {
+        return false;
+    }
+
+    for (Unit* debuffedPlayer : debuffedPlayers)
+    {
+        float dist = debuffedPlayer->GetExactDist2d(bot->GetPositionX(), bot->GetPositionY());
+        if (dist < range)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool TooFarFromPlayerWithAuraTrigger::TooFarFromPlayerWithAura(uint32 spellId, float range, bool selfInclude)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+    {
+        return false;
+    }
+
+    std::vector<Player*> debuffedPlayers;
+
+    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+    {
+        Player* player = gref->GetSource();
+        if (player && player->IsAlive() && player->HasAura(spellId) &&
+            (selfInclude || (!selfInclude && player->GetGUID() != bot->GetGUID())))
+        {
+            debuffedPlayers.push_back(player);
+        }
+    }
+
+    return !debuffedPlayers.empty();
+
+    if (debuffedPlayers.empty())
+    {
+        return false;
+    }
+
+    for (Unit* debuffedPlayer : debuffedPlayers)
+    {
+        float dist = debuffedPlayer->GetExactDist2d(bot->GetPositionX(), bot->GetPositionY());
+        if (dist > range)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }

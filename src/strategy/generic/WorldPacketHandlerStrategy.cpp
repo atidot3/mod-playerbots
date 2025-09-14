@@ -35,10 +35,15 @@ void WorldPacketHandlerStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
                                                                           new NextAction("taxi", relevance), nullptr)));
     triggers.push_back(new TriggerNode("taxi done", NextAction::array(0, new NextAction("taxi", relevance), nullptr)));
     triggers.push_back(new TriggerNode("trade status", NextAction::array(0, new NextAction("accept trade", relevance), new NextAction("equip upgrades", relevance), nullptr)));
+    triggers.push_back(new TriggerNode("trade status extended", NextAction::array(0, new NextAction("trade status extended", relevance), nullptr)));
     triggers.push_back(new TriggerNode("area trigger", NextAction::array(0, new NextAction("reach area trigger", relevance), nullptr)));
     triggers.push_back(new TriggerNode("within area trigger", NextAction::array(0, new NextAction("area trigger", relevance), nullptr)));
     triggers.push_back(new TriggerNode("loot response", NextAction::array(0, new NextAction("store loot", relevance), nullptr)));
-    triggers.push_back(new TriggerNode("item push result", NextAction::array(0, new NextAction("query item usage", relevance), new NextAction("equip upgrades", relevance), nullptr)));
+    triggers.push_back(new TriggerNode("item push result", NextAction::array(0, new NextAction("unlock items", relevance),
+                                                                                new NextAction("open items", relevance),
+                                                                                new NextAction("query item usage", relevance), 
+                                                                                new NextAction("equip upgrades", relevance), nullptr)));
+    triggers.push_back(new TriggerNode("item push result", NextAction::array(0, new NextAction("quest item push result", relevance), nullptr)));
     triggers.push_back(new TriggerNode("ready check finished", NextAction::array(0, new NextAction("finish ready check", relevance), nullptr)));
     // triggers.push_back(new TriggerNode("often", NextAction::array(0, new NextAction("security check", relevance), new NextAction("check mail", relevance), nullptr)));
     triggers.push_back(new TriggerNode("guild invite", NextAction::array(0, new NextAction("guild accept", relevance), nullptr)));
@@ -62,6 +67,9 @@ void WorldPacketHandlerStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
     // quest ?
     //triggers.push_back(new TriggerNode("quest confirm", NextAction::array(0, new NextAction("quest confirm", relevance), nullptr)));
     triggers.push_back(new TriggerNode("questgiver quest details", NextAction::array(0, new NextAction("turn in query quest", relevance), nullptr)));
+
+    // loot roll
+    triggers.push_back(new TriggerNode("very often", NextAction::array(0, new NextAction("loot roll", 10.0f), nullptr)));
 }
 
 WorldPacketHandlerStrategy::WorldPacketHandlerStrategy(PlayerbotAI* botAI) : PassTroughStrategy(botAI)
@@ -79,7 +87,7 @@ WorldPacketHandlerStrategy::WorldPacketHandlerStrategy(PlayerbotAI* botAI) : Pas
 
     // quests
     supported.push_back("quest update add kill");
-    supported.push_back("quest update add item");
+    // supported.push_back("quest update add item");
     supported.push_back("quest update failed");
     supported.push_back("quest update failed timer");
     supported.push_back("quest update complete");

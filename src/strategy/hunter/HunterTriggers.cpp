@@ -4,13 +4,30 @@
  */
 
 #include "HunterTriggers.h"
-
+#include "GenericSpellActions.h"
 #include "GenericTriggers.h"
 #include "HunterActions.h"
+#include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "ServerFacade.h"
 #include "SharedDefines.h"
+#include "Player.h"
+
+bool KillCommandTrigger::IsActive()
+{
+    Unit* target = GetTarget();
+    return !botAI->HasAura("kill command", target);
+}
+
+bool BlackArrowTrigger::IsActive()
+{
+    if (botAI->HasStrategy("trap weave", BOT_STATE_COMBAT))
+        return false;
+
+    return DebuffTrigger::IsActive();
+    return BuffTrigger::IsActive();
+}
 
 bool HunterAspectOfTheHawkTrigger::IsActive()
 {
@@ -25,6 +42,7 @@ bool HunterNoStingsActiveTrigger::IsActive()
     Unit* target = AI_VALUE(Unit*, "current target");
     return DebuffTrigger::IsActive() && target && !botAI->HasAura("serpent sting", target, false, true) &&
            !botAI->HasAura("scorpid sting", target, false, true) && !botAI->HasAura("viper sting", target, false, true);
+    return BuffTrigger::IsActive();
 }
 
 bool HuntersPetDeadTrigger::IsActive()
@@ -120,4 +138,33 @@ bool SerpentStingOnAttackerTrigger::IsActive()
     }
     return !botAI->HasAura("scorpid sting", target, false, true) &&
            !botAI->HasAura("viper sting", target, false, true);
+    return BuffTrigger::IsActive();
+}
+
+const std::set<uint32> VolleyChannelCheckTrigger::VOLLEY_SPELL_IDS = {
+    1510,   // Volley Rank 1
+    14294,  // Volley Rank 2
+    14295,  // Volley Rank 3
+    27022,  // Volley Rank 4
+    58431,  // Volley Rank 5
+    58434   // Volley Rank 6
+};
+
+bool VolleyChannelCheckTrigger::IsActive()
+{
+    Player* bot = botAI->GetBot();
+
+    // Check if the bot is channeling a spell
+    if (Spell* spell = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+    {
+        // Only trigger if the spell being channeled is Volley
+        if (VOLLEY_SPELL_IDS.count(spell->m_spellInfo->Id))
+        {
+            uint8 attackerCount = AI_VALUE(uint8, "attacker count");
+            return attackerCount < minEnemies;
+        }
+    }
+
+    // Not channeling Volley
+    return false;
 }

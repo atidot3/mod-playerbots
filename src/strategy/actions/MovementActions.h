@@ -73,6 +73,7 @@ private:
     // normal_only = false, float step = 8.0f);
     const Movement::PointsArray SearchForBestPath(float x, float y, float z, float& modified_z, int maxSearchCount = 5,
                                                   bool normal_only = false, float step = 8.0f);
+    bool wasMovementRestricted = false;
 };
 
 class FleeAction : public MovementAction
@@ -291,6 +292,36 @@ public:
     MoveFromGroupAction(PlayerbotAI* botAI, std::string const name = "move from group") : MovementAction(botAI, name) {}
 
     bool Execute(Event event) override;
+};
+
+class MoveAwayFromCreatureAction : public MovementAction
+{
+public:
+    MoveAwayFromCreatureAction(PlayerbotAI* botAI, std::string name, uint32 creatureId, float range, bool alive = true)
+        : MovementAction(botAI, name), creatureId(creatureId), range(range), alive(alive) {}
+
+    bool Execute(Event event) override;
+    bool isPossible() override;
+
+private:
+    uint32 creatureId;
+    float range;
+    bool alive;
+};
+
+class MoveAwayFromPlayerWithDebuffAction : public MovementAction
+{
+public:
+    MoveAwayFromPlayerWithDebuffAction(PlayerbotAI* botAI, std::string name, uint32 spellId, float range)
+        : MovementAction(botAI, name), spellId(spellId), range(range) {}
+
+    bool Execute(Event event) override;
+    bool isPossible() override;
+
+private:
+    uint32 spellId;
+    float range;
+    bool alive;
 };
 
 #endif

@@ -33,13 +33,18 @@ void TrainerAction::Learn(uint32 cost, TrainerSpell const* tSpell, std::ostrings
         if (spellInfo->Effects[j].Effect == SPELL_EFFECT_LEARN_SPELL)
         {
             uint32 learnedSpell = spellInfo->Effects[j].TriggerSpell;
-            bot->learnSpell(learnedSpell);
-            learned = true;
+            if (!bot->HasSpell(learnedSpell))
+            {
+                bot->learnSpell(learnedSpell);
+                learned = true;
+            }
         }
     }
 
-    if (!learned)
+    if (!learned && !bot->HasSpell(tSpell->spell))
+    {
         bot->learnSpell(tSpell->spell);
+    }
 
     msg << " - learned";
 }
@@ -162,26 +167,33 @@ bool MaintenanceAction::Execute(Event event)
         botAI->TellError("maintenance command is not allowed, please check the configuration.");
         return false;
     }
+
     botAI->TellMaster("I'm maintaining");
     PlayerbotFactory factory(bot, bot->GetLevel());
+    factory.InitAttunementQuests();
     factory.InitBags(false);
     factory.InitAmmo();
     factory.InitFood();
     factory.InitReagents();
+    factory.InitConsumables();
+    factory.InitPotions();
     factory.InitTalentsTree(true);
     factory.InitPet();
     factory.InitPetTalents();
     factory.InitClassSpells();
     factory.InitAvailableSpells();
     factory.InitSkills();
+    factory.InitReputation();
+    factory.InitSpecialSpells();
     factory.InitMounts();
-    factory.InitGlyphs(true);
+    factory.InitGlyphs(false);
+    factory.InitKeyring();
     if (bot->GetLevel() >= sPlayerbotAIConfig->minEnchantingBotLevel)
-    {
         factory.ApplyEnchantAndGemsNew();
-    }
+
     bot->DurabilityRepairAll(false, 1.0f, false);
     bot->SendTalentsInfoData(false);
+
     return true;
 }
 
@@ -203,13 +215,11 @@ bool AutoGearAction::Execute(Event event)
         return false;
     }
 
-    if (!sPlayerbotAIConfig->autoGearCommandAltBots)
+    if (!sPlayerbotAIConfig->autoGearCommandAltBots &&
+        !sPlayerbotAIConfig->IsInRandomAccountList(bot->GetSession()->GetAccountId()))
     {
-        if (!sRandomPlayerbotMgr->IsRandomBot(bot))
-        {
-            botAI->TellError("You cannot use autogear on alt bots.");
-            return false;
-        }
+        botAI->TellError("You cannot use autogear on alt bots.");
+        return false;
     }
 
     botAI->TellMaster("I'm auto gearing");

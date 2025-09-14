@@ -29,6 +29,7 @@ public:
     LootObject() : skillId(0), reqSkillValue(0), reqItem(0) {}
     LootObject(Player* bot, ObjectGuid guid);
     LootObject(LootObject const& other);
+    LootObject& operator=(LootObject const& other) = default;
 
     bool IsEmpty() { return !guid; }
     bool IsLootPossible(Player* bot);
@@ -77,7 +78,7 @@ public:
     LootObject GetLoot(float maxDistance = 0);
 
 private:
-    std::vector<LootObject> OrderByDistance(float maxDistance = 0);
+    LootObject GetNearest(float maxDistance = 0);
 
     Player* bot;
     LootTargetList availableLoot;

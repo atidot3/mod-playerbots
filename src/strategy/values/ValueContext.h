@@ -118,6 +118,8 @@ public:
         creators["prioritized targets"] = &ValueContext::prioritized_targets;
         creators["all targets"] = &ValueContext::all_targets;
         creators["possible rpg targets"] = &ValueContext::possible_rpg_targets;
+        creators["possible new rpg targets"] = &ValueContext::possible_new_rpg_targets;
+        creators["possible new rpg game objects"] = &ValueContext::possible_new_rpg_game_objects;
         creators["nearest adds"] = &ValueContext::nearest_adds;
         creators["nearest corpses"] = &ValueContext::nearest_corpses;
         creators["log level"] = &ValueContext::log_level;
@@ -158,6 +160,7 @@ public:
         creators["my attacker count"] = &ValueContext::my_attacker_count;
         creators["has aggro"] = &ValueContext::has_aggro;
         creators["mounted"] = &ValueContext::mounted;
+		creators["custom_glyphs"] = &ValueContext::custom_glyphs;   // Added for custom glyphs
 
         creators["can loot"] = &ValueContext::can_loot;
         creators["loot target"] = &ValueContext::loot_target;
@@ -192,6 +195,7 @@ public:
         creators["rti cc"] = &ValueContext::rti_cc;
         creators["rti"] = &ValueContext::rti;
         creators["position"] = &ValueContext::position;
+        creators["pos"] = &ValueContext::pos;
         creators["current position"] = &ValueContext::current_position;
         creators["threat"] = &ValueContext::threat;
 
@@ -340,6 +344,7 @@ private:
     static UntypedValue* attackers(PlayerbotAI* botAI) { return new AttackersValue(botAI); }
 
     static UntypedValue* position(PlayerbotAI* botAI) { return new PositionValue(botAI); }
+    static UntypedValue* pos(PlayerbotAI* ai) { return new SinglePositionValue(ai); }
     static UntypedValue* current_position(PlayerbotAI* botAI) { return new CurrentPositionValue(botAI); }
     static UntypedValue* rti(PlayerbotAI* botAI) { return new RtiValue(botAI); }
     static UntypedValue* rti_cc(PlayerbotAI* botAI) { return new RtiCcValue(botAI); }
@@ -406,6 +411,8 @@ private:
     static UntypedValue* nearest_enemy_players(PlayerbotAI* botAI) { return new NearestEnemyPlayersValue(botAI); }
     static UntypedValue* nearest_corpses(PlayerbotAI* botAI) { return new NearestCorpsesValue(botAI); }
     static UntypedValue* possible_rpg_targets(PlayerbotAI* botAI) { return new PossibleRpgTargetsValue(botAI); }
+    static UntypedValue* possible_new_rpg_targets(PlayerbotAI* botAI) { return new PossibleNewRpgTargetsValue(botAI); }
+    static UntypedValue* possible_new_rpg_game_objects(PlayerbotAI* botAI) { return new PossibleNewRpgGameObjectsValue(botAI); }
     static UntypedValue* possible_targets(PlayerbotAI* botAI) { return new PossibleTargetsValue(botAI); }
     static UntypedValue* possible_triggers(PlayerbotAI* botAI) { return new PossibleTriggersValue(botAI); }
     static UntypedValue* possible_targets_no_los(PlayerbotAI* botAI)
@@ -548,6 +555,13 @@ private:
     static UntypedValue* last_flee_angle(PlayerbotAI* ai) { return new LastFleeAngleValue(ai); }
     static UntypedValue* last_flee_timestamp(PlayerbotAI* ai) { return new LastFleeTimestampValue(ai); }
     static UntypedValue* recently_flee_info(PlayerbotAI* ai) { return new RecentlyFleeInfo(ai); }
+	// -------------------------------------------------------
+    // Flag for cutom glyphs : true when /w bot glyph equip
+    // -------------------------------------------------------
+    static UntypedValue* custom_glyphs(PlayerbotAI* ai)
+    {
+        return new ManualSetValue<bool>(ai, false, "custom_glyphs");
+    }
 };
 
 #endif

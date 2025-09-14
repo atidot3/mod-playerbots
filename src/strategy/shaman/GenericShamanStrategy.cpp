@@ -22,6 +22,7 @@ public:
         creators["riptide"] = &riptide;
         creators["riptide on party"] = &riptide_on_party;
         creators["earth shock"] = &earth_shock;
+        creators["water shield"] = &water_shield;
     }
 
 private:
@@ -97,6 +98,15 @@ private:
                               /*A*/ nullptr,
                               /*C*/ nullptr);
     }
+
+    static ActionNode* water_shield([[maybe_unused]] PlayerbotAI* botAI)
+    {
+        return new ActionNode("water shield",
+                              /*P*/ nullptr,
+                              /*A*/ NextAction::array(0, new NextAction("lightning shield"), nullptr),
+                              /*C*/ nullptr);
+    }
+    
 };
 
 GenericShamanStrategy::GenericShamanStrategy(PlayerbotAI* botAI) : CombatStrategy(botAI)
@@ -123,6 +133,8 @@ void GenericShamanStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // NextAction("riptide", 26.0f), nullptr)));
     triggers.push_back(new TriggerNode("heroism", NextAction::array(0, new NextAction("heroism", 31.0f), nullptr)));
     triggers.push_back(new TriggerNode("bloodlust", NextAction::array(0, new NextAction("bloodlust", 30.0f), nullptr)));
+    triggers.push_back(new TriggerNode("has pet", NextAction::array(0, new NextAction("toggle pet spell", 60.0f), nullptr)));
+    triggers.push_back(new TriggerNode("new pet", NextAction::array(0, new NextAction("set pet stance", 65.0f), nullptr)));
 }
 
 void ShamanBuffDpsStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)

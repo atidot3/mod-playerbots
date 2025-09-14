@@ -23,10 +23,13 @@
 #include "DatabaseLoader.h"
 #include "GuildTaskMgr.h"
 #include "Metric.h"
+#include "PlayerScript.h"
+#include "PlayerbotAIConfig.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
 #include "cs_playerbots.h"
 #include "cmath"
+#include "BattleGroundTactics.h"
 
 class PlayerbotsDatabaseScript : public DatabaseScript
 {
@@ -72,31 +75,38 @@ public:
     }
 };
 
-class PlayerbotsMetricScript : public MetricScript
-{
-public:
-    PlayerbotsMetricScript() : MetricScript("PlayerbotsMetricScript") {}
-
-    void OnMetricLogging() override
-    {
-        if (sMetric->IsEnabled())
-        {
-            sMetric->LogValue("db_queue_playerbots", uint64(PlayerbotsDatabase.QueueSize()), {});
-        }
-    }
-};
-
 class PlayerbotsPlayerScript : public PlayerScript
 {
 public:
-    PlayerbotsPlayerScript() : PlayerScript("PlayerbotsPlayerScript") {}
+    PlayerbotsPlayerScript() : PlayerScript("PlayerbotsPlayerScript", {
+        PLAYERHOOK_ON_LOGIN,
+        PLAYERHOOK_ON_AFTER_UPDATE,
+        PLAYERHOOK_ON_CHAT,
+        PLAYERHOOK_ON_CHAT_WITH_CHANNEL,
+        PLAYERHOOK_ON_CHAT_WITH_GROUP,
+        PLAYERHOOK_ON_BEFORE_CRITERIA_PROGRESS,
+        PLAYERHOOK_ON_BEFORE_ACHI_COMPLETE,
+        PLAYERHOOK_CAN_PLAYER_USE_PRIVATE_CHAT,
+        PLAYERHOOK_ON_GIVE_EXP
+    }) {}
 
-    void OnLogin(Player* player) override
+    void OnPlayerLogin(Player* player) override
     {
         if (!player->GetSession()->IsBot())
         {
             sPlayerbotsMgr->AddPlayerbotData(player, false);
             sRandomPlayerbotMgr->OnPlayerLogin(player);
+
+            // Before modifying the following messages, please make sure it does not violate the AGPLv3.0 license
+            // especially if you are distributing a repack or hosting a public server
+            // e.g. you can replace the URL with your own repository,
+            // but it should be publicly accessible and include all modifications you've made
+            if (sPlayerbotAIConfig->enabled)
+            {
+                ChatHandler(player->GetSession()).SendSysMessage(
+                    "|cff00ff00This server runs with |cff00ccffmod-playerbots|r "
+                    "|cffcccccchttps://github.com/liyunfan1223/mod-playerbots|r");
+            }
 
             if (sPlayerbotAIConfig->enabled || sPlayerbotAIConfig->randomBotAutologin)
             {
@@ -105,12 +115,13 @@ public:
                 roundedTime = roundedTime.substr(0, roundedTime.find('.') + 2);
 
                 ChatHandler(player->GetSession()).SendSysMessage(
-                    "Playerbots: bot initialization at server startup takes about '" + roundedTime + "' minutes.");
+                    "|cff00ff00Playerbots:|r bot initialization at server startup takes about '" 
+                    + roundedTime + "' minutes.");
             }
         }
     }
 
-    void OnAfterUpdate(Player* player, uint32 diff) override
+    void OnPlayerAfterUpdate(Player* player, uint32 diff) override
     {
         if (PlayerbotAI* botAI = GET_PLAYERBOT_AI(player))
         {
@@ -123,7 +134,7 @@ public:
         }
     }
 
-    bool CanPlayerUseChat(Player* player, uint32 type, uint32 /*lang*/, std::string& msg, Player* receiver) override
+    bool OnPlayerCanUseChat(Player* player, uint32 type, uint32 /*lang*/, std::string& msg, Player* receiver) override
     {
         if (type == CHAT_MSG_WHISPER)
         {
@@ -138,7 +149,7 @@ public:
         return true;
     }
 
-    void OnChat(Player* player, uint32 type, uint32 /*lang*/, std::string& msg, Group* group) override
+    void OnPlayerChat(Player* player, uint32 type, uint32 /*lang*/, std::string& msg, Group* group) override
     {
         for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
         {
@@ -152,7 +163,7 @@ public:
         }
     }
 
-    void OnChat(Player* player, uint32 type, uint32 /*lang*/, std::string& msg) override
+    void OnPlayerChat(Player* player, uint32 type, uint32 /*lang*/, std::string& msg) override
     {
         if (type == CHAT_MSG_GUILD)
         {
@@ -173,7 +184,7 @@ public:
         }
     }
 
-    void OnChat(Player* player, uint32 type, uint32 /*lang*/, std::string& msg, Channel* channel) override
+    void OnPlayerChat(Player* player, uint32 type, uint32 /*lang*/, std::string& msg, Channel* channel) override
     {
         if (PlayerbotMgr* playerbotMgr = GET_PLAYERBOT_MGR(player))
         {
@@ -186,22 +197,46 @@ public:
         sRandomPlayerbotMgr->HandleCommand(type, msg, player);
     }
 
-    bool OnBeforeCriteriaProgress(Player* player, AchievementCriteriaEntry const* /*criteria*/) override
+    bool OnPlayerBeforeAchievementComplete(Player* player, AchievementEntry const* achievement) override
     {
-        if (sRandomPlayerbotMgr->IsRandomBot(player))
+        if (sRandomPlayerbotMgr->IsRandomBot(player) && (achievement->flags == 256 || achievement->flags == 768))
         {
             return false;
         }
+
         return true;
     }
 
-    bool OnBeforeAchiComplete(Player* player, AchievementEntry const* /*achievement*/) override
+    void OnPlayerGiveXP(Player* player, uint32& amount, Unit* /*victim*/, uint8 /*xpSource*/) override
     {
-        if (sRandomPlayerbotMgr->IsRandomBot(player))
+        // early return
+        if (sPlayerbotAIConfig->randomBotXPRate == 1.0 || !player)
+            return;
+
+        // no XP multiplier, when player is no bot.
+        if (!player->GetSession()->IsBot() || !sRandomPlayerbotMgr->IsRandomBot(player))
+            return;
+
+        // no XP multiplier, when bot is in a group with a real player.
+        if (Group* group = player->GetGroup())
         {
-            return false;
+            for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+            {
+                Player* member = gref->GetSource();
+                if (!member)
+                {
+                    continue;
+                }
+
+                if (!member->GetSession()->IsBot())
+                {
+                    return;
+                }
+            }
         }
-        return true;
+
+        // otherwise apply bot XP multiplier.
+        amount = static_cast<uint32>(std::round(static_cast<float>(amount) * sPlayerbotAIConfig->randomBotXPRate));
     }
 };
 
@@ -227,7 +262,9 @@ public:
 class PlayerbotsServerScript : public ServerScript
 {
 public:
-    PlayerbotsServerScript() : ServerScript("PlayerbotsServerScript") {}
+    PlayerbotsServerScript() : ServerScript("PlayerbotsServerScript", {
+        SERVERHOOK_CAN_PACKET_RECEIVE
+    }) {}
 
     void OnPacketReceived(WorldSession* session, WorldPacket const& packet) override
     {
@@ -240,12 +277,29 @@ public:
 class PlayerbotsWorldScript : public WorldScript
 {
 public:
-    PlayerbotsWorldScript() : WorldScript("PlayerbotsWorldScript") {}
+    PlayerbotsWorldScript() : WorldScript("PlayerbotsWorldScript", {
+        WORLDHOOK_ON_BEFORE_WORLD_INITIALIZED
+    }) {}
 
     void OnBeforeWorldInitialized() override
     {
-        uint32 oldMSTime = getMSTime();
+        // Before modifying the following messages, please make sure it does not violate the AGPLv3.0 license
+        // especially if you are distributing a repack or hosting a public server
+        // e.g. you can replace the URL with your own repository,
+        // but it should be publicly accessible and include all modifications you've made
+        LOG_INFO("server.loading", "╔══════════════════════════════════════════════════════════╗");
+        LOG_INFO("server.loading", "║                                                          ║");
+        LOG_INFO("server.loading", "║              AzerothCore Playerbots Module               ║");
+        LOG_INFO("server.loading", "║                                                          ║");
+        LOG_INFO("server.loading", "╟──────────────────────────────────────────────────────────╢");
+        LOG_INFO("server.loading", "║     mod-playerbots is a community-driven open-source     ║");
+        LOG_INFO("server.loading", "║  project based on AzerothCore, licensed under AGPLv3.0   ║");
+        LOG_INFO("server.loading", "╟──────────────────────────────────────────────────────────╢");
+        LOG_INFO("server.loading", "║      https://github.com/liyunfan1223/mod-playerbots      ║");
+        LOG_INFO("server.loading", "╚══════════════════════════════════════════════════════════╝");
 
+        uint32 oldMSTime = getMSTime();
+        
         LOG_INFO("server.loading", " ");
         LOG_INFO("server.loading", "Load Playerbots Config...");
 
@@ -339,18 +393,59 @@ public:
         sRandomPlayerbotMgr->OnPlayerLogout(player);
     }
 
-    void OnPlayerbotLogoutBots() override { sRandomPlayerbotMgr->LogoutAllBots(); }
+    void OnPlayerbotLogoutBots() override
+    {
+        LOG_INFO("playerbots", "Logging out all bots...");
+        sRandomPlayerbotMgr->LogoutAllBots();
+    }
+};
+
+class PlayerBotsBGScript : public BGScript
+{
+public:
+    PlayerBotsBGScript() : BGScript("PlayerBotsBGScript") {}
+
+    void OnBattlegroundStart(Battleground* bg) override
+    {
+        BGStrategyData data;
+
+        switch (bg->GetBgTypeID())
+        {
+            case BATTLEGROUND_WS:
+                data.allianceStrategy = urand(0, WS_STRATEGY_MAX - 1);
+                data.hordeStrategy = urand(0, WS_STRATEGY_MAX - 1);
+                break;
+            case BATTLEGROUND_AB:
+                data.allianceStrategy = urand(0, AB_STRATEGY_MAX - 1);
+                data.hordeStrategy = urand(0, AB_STRATEGY_MAX - 1);
+                break;
+            case BATTLEGROUND_AV:
+                data.allianceStrategy = urand(0, AV_STRATEGY_MAX - 1);
+                data.hordeStrategy = urand(0, AV_STRATEGY_MAX - 1);
+                break;
+            case BATTLEGROUND_EY:
+                data.allianceStrategy = urand(0, EY_STRATEGY_MAX - 1);
+                data.hordeStrategy = urand(0, EY_STRATEGY_MAX - 1);
+                break;
+            default:
+                break;
+        }
+
+        bgStrategies[bg->GetInstanceID()] = data;
+    }
+
+    void OnBattlegroundEnd(Battleground* bg, TeamId /*winnerTeam*/) override { bgStrategies.erase(bg->GetInstanceID()); }
 };
 
 void AddPlayerbotsScripts()
 {
     new PlayerbotsDatabaseScript();
-    new PlayerbotsMetricScript();
     new PlayerbotsPlayerScript();
     new PlayerbotsMiscScript();
     new PlayerbotsServerScript();
     new PlayerbotsWorldScript();
     new PlayerbotsScript();
+    new PlayerBotsBGScript();
 
     AddSC_playerbots_commandscript();
 }

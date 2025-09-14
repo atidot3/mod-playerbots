@@ -17,6 +17,8 @@ public:
     ChatTriggerContext()
     {
         creators["open items"] = &ChatTriggerContext::open_items;
+        creators["unlock items"] = &ChatTriggerContext::unlock_items;
+        creators["unlock traded item"] = &ChatTriggerContext::unlock_traded_item;
         creators["quests"] = &ChatTriggerContext::quests;
         creators["stats"] = &ChatTriggerContext::stats;
         creators["leave"] = &ChatTriggerContext::leave;
@@ -25,6 +27,7 @@ public:
         creators["log"] = &ChatTriggerContext::log;
         creators["los"] = &ChatTriggerContext::los;
         creators["rpg status"] = &ChatTriggerContext::rpg_status;
+        creators["rpg do quest"] = &ChatTriggerContext::rpg_do_quest;
         creators["aura"] = &ChatTriggerContext::aura;
         creators["drop"] = &ChatTriggerContext::drop;
         creators["share"] = &ChatTriggerContext::share;
@@ -85,6 +88,7 @@ public:
         creators["cast"] = &ChatTriggerContext::cast;
         creators["castnc"] = &ChatTriggerContext::castnc;
         creators["invite"] = &ChatTriggerContext::invite;
+        creators["lfg"] = &ChatTriggerContext::lfg;
         creators["spell"] = &ChatTriggerContext::spell;
         creators["rti"] = &ChatTriggerContext::rti;
         creators["revive"] = &ChatTriggerContext::revive;
@@ -108,7 +112,7 @@ public:
         creators["cdebug"] = &ChatTriggerContext::cdebug;
         creators["cs"] = &ChatTriggerContext::cs;
         creators["wts"] = &ChatTriggerContext::wts;
-        creators["hire"] = &ChatTriggerContext::hire;
+        // creators["hire"] = &ChatTriggerContext::hire;  // Not correctly implemented at this time, would cause crash and other issues.
         creators["craft"] = &ChatTriggerContext::craft;
         creators["flag"] = &ChatTriggerContext::craft;
         creators["range"] = &ChatTriggerContext::range;
@@ -127,10 +131,20 @@ public:
         creators["dps"] = &ChatTriggerContext::dps;
         creators["disperse"] = &ChatTriggerContext::disperse;
         creators["calc"] = &ChatTriggerContext::calc;
+        creators["qi"] = &ChatTriggerContext::qi;
+        creators["wipe"] = &ChatTriggerContext::wipe;
+        creators["tame"] = &ChatTriggerContext::tame;
+        creators["glyphs"] = &ChatTriggerContext::glyphs; // Added for custom Glyphs
+        creators["glyph equip"] = &ChatTriggerContext::glyph_equip; // Added for custom Glyphs
+        creators["pet"] = &ChatTriggerContext::pet;
+        creators["pet attack"] = &ChatTriggerContext::pet_attack;
+        creators["roll"] = &ChatTriggerContext::roll_action;
     }
 
 private:
     static Trigger* open_items(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "open items"); }
+    static Trigger* unlock_items(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "unlock items"); }
+    static Trigger* unlock_traded_item(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "unlock traded item"); }
     static Trigger* ra(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "ra"); }
     static Trigger* range(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "range"); }
     static Trigger* flag(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "flag"); }
@@ -158,6 +172,7 @@ private:
     static Trigger* revive(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "revive"); }
     static Trigger* rti(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "rti"); }
     static Trigger* invite(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "invite"); }
+    static Trigger* lfg(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "lfg"); }
     static Trigger* cast(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "cast"); }
     static Trigger* castnc(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "castnc"); }
     static Trigger* talk(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "talk"); }
@@ -213,6 +228,7 @@ private:
     static Trigger* log(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "log"); }
     static Trigger* los(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "los"); }
     static Trigger* rpg_status(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "rpg status"); }
+    static Trigger* rpg_do_quest(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "rpg do quest"); }
     static Trigger* aura(PlayerbotAI* ai) { return new ChatCommandTrigger(ai, "aura"); }
     static Trigger* loot_all(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "add all loot"); }
     static Trigger* release(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "release"); }
@@ -233,6 +249,14 @@ private:
     static Trigger* dps(PlayerbotAI* ai) { return new ChatCommandTrigger(ai, "dps"); }
     static Trigger* disperse(PlayerbotAI* ai) { return new ChatCommandTrigger(ai, "disperse"); }
     static Trigger* calc(PlayerbotAI* ai) { return new ChatCommandTrigger(ai, "calc"); }
+    static Trigger* qi(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "qi"); }
+    static Trigger* wipe(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "wipe"); }
+    static Trigger* tame(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "tame"); }
+    static Trigger* glyphs(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "glyphs"); } // Added for custom Glyphs
+    static Trigger* glyph_equip(PlayerbotAI* ai) { return new ChatCommandTrigger(ai, "glyph equip"); } // Added for custom Glyphs
+    static Trigger* pet(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "pet"); }
+    static Trigger* pet_attack(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "pet attack"); }
+    static Trigger* roll_action(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "roll"); }
 };
 
 #endif

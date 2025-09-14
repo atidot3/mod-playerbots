@@ -26,6 +26,7 @@ protected:
 };
 
 bool CanBotUseToken(ItemTemplate const* proto, Player* bot);
+bool RollUniqueCheck(ItemTemplate const* proto, Player* bot);
 
 class MasterLootRollAction : public LootRollAction
 {
@@ -33,6 +34,14 @@ public:
     MasterLootRollAction(PlayerbotAI* botAI) : LootRollAction(botAI, "master loot roll") {}
 
     bool isUseful() override;
+    bool Execute(Event event) override;
+};
+
+class RollAction : public Action
+{
+public:
+    RollAction(PlayerbotAI* botAI) : Action(botAI, "roll") {}
+
     bool Execute(Event event) override;
 };
 

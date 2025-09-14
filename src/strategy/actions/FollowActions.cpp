@@ -36,10 +36,13 @@ bool FollowAction::Execute(Event event)
                        true, priority, true);
     }
 
-    if (Pet* pet = bot->GetPet())
-    {
-        botAI->PetFollow();
-    }
+    // This section has been commented out because it was forcing the pet to 
+    // follow the bot on every "follow" action tick, overriding any attack or
+    // stay commands that might have been issued by the player.
+    // if (Pet* pet = bot->GetPet())
+    // {
+    //     botAI->PetFollow();
+    // }
     // if (moved)
     // botAI->SetNextCheckDelay(sPlayerbotAIConfig->reactDelay);
 
@@ -100,6 +103,10 @@ bool FollowAction::isUseful()
 
 bool FollowAction::CanDeadFollow(Unit* target)
 {
+    // In battleground, wait for spirit healer
+    if (bot->InBattleground() && !bot->IsAlive())
+        return false;
+
     // Move to corpse when dead and player is alive or not a ghost.
     if (!bot->IsAlive() && (target->IsAlive() || !target->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_GHOST)))
         return false;

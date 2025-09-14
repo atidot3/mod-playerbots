@@ -8,6 +8,8 @@
 #include "Event.h"
 #include "LastMovementValue.h"
 #include "Playerbots.h"
+#include "PlayerbotAIConfig.h"
+#include "Config.h"
 
 bool TaxiAction::Execute(Event event)
 {
@@ -48,6 +50,36 @@ bool TaxiAction::Execute(Event event)
                 }
         }
 
+        // stagger bot takeoff
+        uint32 delayMin = sConfigMgr->GetOption<uint32>("AiPlayerbot.BotTaxiDelayMinMs", 350u, false);
+        uint32 delayMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.BotTaxiDelayMaxMs", 5000u, false);
+        uint32 gapMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.BotTaxiGapMs", 200u, false);
+        uint32 gapJitterMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.BotTaxiGapJitterMs", 100u, false);
+
+        // Only for follower bots
+        if (botAI->HasRealPlayerMaster())
+        {
+            uint32 index = botAI->GetGroupSlotIndex(bot);
+            uint32 delay = delayMin + index * gapMs + urand(0, gapJitterMs);
+
+            delay = std::min(delay, delayMax);
+
+            // Store the npc’s GUID so we can re-acquire the pointer later
+            ObjectGuid npcGuid = npc->GetGUID();
+
+            // schedule the take-off
+            botAI->AddTimedEvent(
+                [bot = bot, &movement, npcGuid]() -> void
+                {
+                    if (Creature* npcPtr = ObjectAccessor::GetCreature(*bot, npcGuid))
+                        if (!movement.taxiNodes.empty())
+                            bot->ActivateTaxiPathTo(movement.taxiNodes, npcPtr, 0);
+                },
+                delay);
+            botAI->SetNextCheckDelay(delay + 50);
+            return true;
+        }
+
         if (param == "?")
         {
             botAI->TellMasterNoFacing("=== Taxi ===");
@@ -82,7 +114,7 @@ bool TaxiAction::Execute(Event event)
             return bot->ActivateTaxiPathTo({entry->from, entry->to}, npc, 0);
         }
 
-        if (!movement.taxiNodes.empty() && !bot->ActivateTaxiPathTo(movement.taxiNodes, npc))
+        if (!movement.taxiNodes.empty() && !bot->ActivateTaxiPathTo(movement.taxiNodes, npc, 0))
         {
             movement.taxiNodes.clear();
             movement.Set(nullptr);

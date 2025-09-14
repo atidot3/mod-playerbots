@@ -37,8 +37,11 @@
 #include "TellCastFailedAction.h"
 #include "TellMasterAction.h"
 #include "TradeStatusAction.h"
+#include "TradeStatusExtendedAction.h"
 #include "UseMeetingStoneAction.h"
 #include "NamedObjectContext.h"
+#include "ReleaseSpiritAction.h"
+#include "PetAction.h"
 
 class PlayerbotAI;
 
@@ -65,7 +68,10 @@ public:
         creators["check mount state"] = &WorldPacketActionContext::check_mount_state;
         creators["remember taxi"] = &WorldPacketActionContext::remember_taxi;
         creators["accept trade"] = &WorldPacketActionContext::accept_trade;
+        creators["trade status extended"] = &WorldPacketActionContext::trade_status_extended;
         creators["store loot"] = &WorldPacketActionContext::store_loot;
+        creators["self resurrect"] = &WorldPacketActionContext::self_resurrect;
+        creators["pet"] = &WorldPacketActionContext::pet;
 
         // quest
         creators["talk to quest giver"] = &WorldPacketActionContext::turn_in_quest;
@@ -79,7 +85,8 @@ public:
         creators["quest update failed timer"] = &WorldPacketActionContext::quest_update_failed_timer;
         creators["quest update complete"] = &WorldPacketActionContext::quest_update_complete;
         creators["turn in query quest"] = &WorldPacketActionContext::turn_in_query_quest;
-
+        creators["quest item push result"] = &WorldPacketActionContext::quest_item_push_result;
+        
         creators["party command"] = &WorldPacketActionContext::party_command;
         creators["tell cast failed"] = &WorldPacketActionContext::tell_cast_failed;
         creators["accept duel"] = &WorldPacketActionContext::accept_duel;
@@ -117,6 +124,7 @@ private:
     static Action* party_command(PlayerbotAI* botAI) { return new PartyCommandAction(botAI); }
     static Action* store_loot(PlayerbotAI* botAI) { return new StoreLootAction(botAI); }
     static Action* accept_trade(PlayerbotAI* botAI) { return new TradeStatusAction(botAI); }
+    static Action* trade_status_extended(PlayerbotAI* botAI) { return new TradeStatusExtendedAction(botAI); }
     static Action* remember_taxi(PlayerbotAI* botAI) { return new RememberTaxiAction(botAI); }
     static Action* check_mount_state(PlayerbotAI* botAI) { return new CheckMountStateAction(botAI); }
     static Action* area_trigger(PlayerbotAI* botAI) { return new AreaTriggerAction(botAI); }
@@ -132,6 +140,8 @@ private:
     static Action* tell_not_enough_money(PlayerbotAI* botAI) { return new TellMasterAction(botAI, "Not enough money"); }
     static Action* tell_not_enough_reputation(PlayerbotAI* botAI) { return new TellMasterAction(botAI, "Not enough reputation"); }
     static Action* tell_cannot_equip(PlayerbotAI* botAI) { return new InventoryChangeFailureAction(botAI); }
+    static Action* self_resurrect(PlayerbotAI* botAI) { return new SelfResurrectAction(botAI); }
+    static Action* pet(PlayerbotAI* botAI) { return new PetAction(botAI); }
 
     // quest
     static Action* quest_update_add_kill(PlayerbotAI* ai) { return new QuestUpdateAddKillAction(ai); }
@@ -139,6 +149,7 @@ private:
     static Action* quest_update_failed(PlayerbotAI* ai) { return new QuestUpdateFailedAction(ai); }
     static Action* quest_update_failed_timer(PlayerbotAI* ai) { return new QuestUpdateFailedTimerAction(ai); }
     static Action* quest_update_complete(PlayerbotAI* botAI) { return new QuestUpdateCompleteAction(botAI); }
+    static Action* quest_item_push_result(PlayerbotAI* ai) { return new QuestItemPushResultAction(ai); }
 
     static Action* turn_in_quest(PlayerbotAI* botAI) { return new TalkToQuestGiverAction(botAI); }
     static Action* accept_quest(PlayerbotAI* botAI) { return new AcceptQuestAction(botAI); }
